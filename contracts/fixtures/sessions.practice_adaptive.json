@@ -51,5 +51,6 @@
         "description": "Müşterinin duygusunu fark edip karşılık verme."
       }
     ]
-  }
+  },
+  "channel": "message"
 }

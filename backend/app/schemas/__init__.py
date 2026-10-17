@@ -53,6 +53,7 @@ def training_detail(t: Training, prompt_version: str) -> dict[str, Any]:
 def assignment_json(a: Assignment, t: Training) -> dict[str, Any]:
     return {
         "id": a.id, "training": training_summary(t), "employee_id": a.employee_id, "status": a.status,
+        "channel": a.channel,
         "assigned_at": iso(a.assigned_at), "due_at": iso(a.due_at), "completed_session_id": a.completed_session_id,
     }
 
@@ -77,7 +78,7 @@ def session_json(db: Session, s: PracticeSession, evaluation_status: str | None,
     return {
         "id": s.id, "training": training_summary(t),
         "employee": {"id": emp.id, "display_name": emp.display_name},
-        "assignment_id": s.assignment_id, "status": s.status,
+        "assignment_id": s.assignment_id, "channel": s.channel, "status": s.status,
         "evaluation_status": evaluation_status, "review_status": review_status,
         "versions": versions(t, s.prompt_version),
         "turns": [turn_json(x) for x in turns],

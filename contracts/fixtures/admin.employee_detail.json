@@ -24,7 +24,8 @@
       "status": "completed",
       "assigned_at": "2026-10-17T20:43:38.736685Z",
       "due_at": null,
-      "completed_session_id": "01M55SP6XP19XH4FZMM9728QYN"
+      "completed_session_id": "01M55SP6XP19XH4FZMM9728QYN",
+      "channel": "message"
     }
   ],
   "recent_sessions": [

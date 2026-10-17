@@ -14,7 +14,13 @@ function ScoreMarks({ score }: { score: number | null }) {
   );
 }
 
-export function ReportView({ report }: { report: EvaluationReport }) {
+export function ReportView({
+  report,
+  onPracticeAgain,
+}: {
+  report: EvaluationReport;
+  onPracticeAgain?: () => void;
+}) {
   const total = report.effective_total;
   const adjustments = new Map(report.manager_review?.adjustments.map(a => [a.dimension_id, a]) ?? []);
   const dimensions = report.dimensions.map(d => {
@@ -67,6 +73,9 @@ export function ReportView({ report }: { report: EvaluationReport }) {
                 </span>
               </div>
             </div>
+            {(dimension.insufficient_evidence || dimension.score == null) && (
+              <p className="mt-2 text-sm text-warn">Bu boyut için yeterli kanıt yok.</p>
+            )}
             <p className="mt-2 text-muted">{dimension.rationale}</p>
             {adjustments.has(dimension.dimension_id) && <p className="mt-2 rounded-xl bg-primary/10 p-3 text-sm"><strong>Yönetici düzeltmesi:</strong> Model puanı {adjustments.get(dimension.dimension_id)?.original_score ?? "—"} → {dimension.score ?? "Puan yok"}. {adjustments.get(dimension.dimension_id)?.reason}</p>}
             {dimension.evidence.length > 0 && (
@@ -103,6 +112,15 @@ export function ReportView({ report }: { report: EvaluationReport }) {
                 <li key={phrase}>“{phrase}”</li>
               ))}
             </ul>
+          )}
+          {onPracticeAgain && (
+            <button
+              type="button"
+              onClick={onPracticeAgain}
+              className="mt-4 rounded-full bg-ink px-4 py-2 text-sm text-paper"
+            >
+              Tekrar dene
+            </button>
           )}
         </article>
       )}

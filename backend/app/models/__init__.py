@@ -75,6 +75,7 @@ class Assignment(Base):
     employee_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     assigned_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
     status: Mapped[str] = mapped_column(String(16), default="assigned")
+    channel: Mapped[str] = mapped_column(String(16), default="message")  # message | phone
     assigned_at: Mapped[datetime] = _created()
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_session_id: Mapped[str | None] = mapped_column(String(26))
@@ -88,6 +89,7 @@ class PracticeSession(Base):
     training_id: Mapped[str] = mapped_column(ForeignKey("trainings.id"))
     employee_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     assignment_id: Mapped[str | None] = mapped_column(ForeignKey("assignments.id"))
+    channel: Mapped[str] = mapped_column(String(16), default="message")  # message | phone
     client_request_id: Mapped[str] = mapped_column(String(36))
     status: Mapped[str] = mapped_column(String(16), default="active")  # active | finished
     prompt_version: Mapped[str] = mapped_column(String(40))

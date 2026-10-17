@@ -31,6 +31,7 @@ export function AssignModal({
     new Set(defaultEmployeeId ? [defaultEmployeeId] : [])
   );
   const [dueDate, setDueDate] = useState<string>("");
+  const [channel, setChannel] = useState<"message" | "phone">("message");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successInfo, setSuccessInfo] = useState<string | null>(null);
 
@@ -39,6 +40,7 @@ export function AssignModal({
     setSelectedTrainingId(defaultTrainingId ?? "");
     setSelectedEmployees(new Set(defaultEmployeeId ? [defaultEmployeeId] : []));
     setDueDate("");
+    setChannel("message");
     setErrorMsg(null);
     setSuccessInfo(null);
   }, [open, defaultTrainingId, defaultEmployeeId]);
@@ -115,6 +117,7 @@ export function AssignModal({
     assignMutation.mutate({
       training_id: selectedTrainingId,
       employee_ids: Array.from(selectedEmployees),
+      channel,
       due_at: dueDate ? new Date(dueDate).toISOString() : null,
     });
   };
@@ -128,7 +131,7 @@ export function AssignModal({
               Eğitim Ata
             </h2>
             <p className="text-sm text-muted">
-              Çalışanlara tamamlamaları gereken yazılı provayı atayın.
+              Mesaj görevi yazılı kalır. Telefon görevi karşılıklı arama simülasyonudur.
             </p>
           </div>
           <button
@@ -171,6 +174,27 @@ export function AssignModal({
                 </option>
               ))}
             </select>
+          </div>
+
+          <div>
+            <p className="mb-2 text-sm font-medium text-ink">Görev türü</p>
+            <div className="flex gap-2">
+              {([
+                ["message", "Mesaj"],
+                ["phone", "Telefon"],
+              ] as const).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setChannel(value)}
+                  className={`rounded-full px-4 py-2 text-sm ${
+                    channel === value ? "bg-ink text-paper" : "border border-line"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Çalışanlar Seçimi */}

@@ -1,10 +1,11 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { api, isApiError } from "../api/client";
-import type { EvaluationEnvelope, Health, Job, Me, Session, TurnAccepted } from "../api/types";
+import type { CreateSessionResponse, EvaluationEnvelope, Health, Job, Me, Session, TurnAccepted } from "../api/types";
 import { Clip } from "../components/Clip";
 import { ReportView } from "../components/ReportView";
+import { PhoneCall } from "../components/PhoneCall";
 import { ReviewModal } from "../components/ReviewModal";
 import { evaluationLabel, formatClock, jobLabel, speakerLabel } from "../lib/labels";
 import { extensionFor, recordOnce, supportedMime } from "../lib/recorder";
@@ -13,6 +14,9 @@ const ACTIVE = new Set(["queued", "transcribing", "generating", "synthesizing", 
 
 export function SessionPage() {
   const { sessionId = "" } = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const focus = (location.state as { focus?: { title: string; instructions: string; names: string[] } } | null)?.focus;
   const queryClient = useQueryClient();
   const thread = useRef<HTMLOListElement>(null);
   const seenAudio = useRef<Set<string> | null>(null);
@@ -30,6 +34,7 @@ export function SessionPage() {
   const browserCanRecord = typeof MediaRecorder !== "undefined" && Boolean(navigator.mediaDevices?.getUserMedia);
   // Ses desteklemeyen kurulumda (ör. Ollama) mikrofon düğmesi hiç gösterilmez.
   const canRecord = browserCanRecord && health.data?.audio_input === true;
+  const [restarting, setRestarting] = useState(false);
 
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<Me>("/me") });
 
@@ -166,6 +171,47 @@ export function SessionPage() {
     }
   }
 
+  async function sendAudio(file: { blob: Blob; durationMs: number; filename: string; clientRequestId: string }) {
+    setNotice(null);
+    const body = new FormData();
+    body.append("audio", file.blob, file.filename);
+    body.append("client_request_id", file.clientRequestId);
+    body.append("client_duration_ms", String(file.durationMs));
+    await api<TurnAccepted>(`/sessions/${sessionId}/turns`, { method: "POST", body });
+    await queryClient.invalidateQueries({ queryKey: ["session", sessionId] });
+  }
+
+  async function practiceAgain() {
+    const drill = evaluation.data?.report?.practice_drill;
+    if (!session || !drill || restarting) return;
+    setRestarting(true);
+    setNotice(null);
+    try {
+      const focusIds = drill.focus_dimension_ids.filter(Boolean).slice(0, 3);
+      const created = await api<CreateSessionResponse>("/sessions", {
+        method: "POST",
+        body: JSON.stringify({
+          training_id: session.training.id,
+          channel: session.channel,
+          client_request_id: crypto.randomUUID(),
+          ...(focusIds.length
+            ? { practice: { of_session_id: session.id, mode: "adaptive", focus_dimension_ids: focusIds } }
+            : {}),
+        }),
+      });
+      const names = focusIds.map(
+        (id) => evaluation.data?.report?.dimensions.find((dimension) => dimension.dimension_id === id)?.name ?? id,
+      );
+      navigate(`/sessions/${created.session.id}`, {
+        state: { focus: { title: drill.title, instructions: drill.instructions, names } },
+      });
+    } catch (error) {
+      setNotice(isApiError(error) ? error.message : "Yeni prova açılamadı.");
+    } finally {
+      setRestarting(false);
+    }
+  }
+
   async function retryJob() {
     if (!liveJobId) return;
     setNotice(null);
@@ -218,6 +264,15 @@ export function SessionPage() {
   const atLimit = session.employee_turn_count >= session.max_turns;
   const canSend = isOwner && !finished && !atLimit && !sending && !jobBusy && !recording;
   const noSpeech = job?.status === "error" && job.error?.code === "no_speech";
+  const phone = session.channel === "phone";
+  const callNote =
+    job?.status === "error"
+      ? (job.error?.message ?? "Hat koptu")
+      : shouldEnd
+        ? "Müşteri kapattı"
+        : atLimit
+          ? "Süre doldu"
+          : notice;
 
   return (
     <div
@@ -234,7 +289,7 @@ export function SessionPage() {
             {finished && evalStatus ? ` · ${session.review_status === "reviewed" ? "İncelendi" : evaluationLabel[evalStatus]}` : ""}
           </p>
         </div>
-        {!finished && isOwner && (
+        {!finished && isOwner && !phone && (
           <button
             type="button"
             onClick={() => void finish()}
@@ -286,7 +341,7 @@ export function SessionPage() {
                   Rapor çıktı ama bazı kanıtlar doğrulanamadı. Sonuç, yönetici bakmadan kesin sayılmıyor.
                 </p>
               )}
-              <ReportView report={evaluation.data.report} />
+              <ReportView report={evaluation.data.report} onPracticeAgain={isOwner ? () => void practiceAgain() : undefined} />
             </>
           ) : evaluation.data?.status === "error" ? (
             <div className="space-y-3"><p role="alert" className="text-accent">{evaluation.data.error?.message ?? "Değerlendirme tamamlanamadı."}</p>{evaluation.data.error?.retryable && <button type="button" onClick={() => void retryEvaluation()} className="rounded-full border border-line px-4 py-2 text-sm text-primary">Değerlendirmeyi tekrar dene</button>}</div>
@@ -296,12 +351,32 @@ export function SessionPage() {
         </div>
       )}
 
+      {!finished && focus && (
+        <p className="mt-4 rounded-2xl bg-pine-soft px-4 py-3 text-sm text-pine">
+          Bu provanın odağı: {focus.names.filter(Boolean).join(", ") || focus.title}. {focus.instructions}
+        </p>
+      )}
+
       {finished && notice && <p role="alert" className="mt-4 text-accent">{notice}</p>}
       {jobQuery.isError && <p role="alert" className="mt-4 text-accent">İş durumu alınamadı. <button type="button" className="underline" onClick={() => void jobQuery.refetch()}>Tekrar kontrol et</button></p>}
 
+      {phone && !finished && (
+        <PhoneCall
+          title={session.training.title}
+          turns={session.turns}
+          sessionId={session.id}
+          waiting={jobBusy || sending}
+          canTalk={canSend && job?.status !== "error" && !shouldEnd}
+          notice={callNote}
+          onUpload={sendAudio}
+          onHangup={() => void finish()}
+          hangupDisabled={session.employee_turn_count === 0 || jobBusy || sending}
+        />
+      )}
+
       <ol
         ref={thread}
-        className={`min-h-0 flex-1 space-y-4 overflow-y-auto ${finished ? "mt-10 border-t border-line pt-8" : "my-4"}`}
+        className={`min-h-0 flex-1 space-y-4 overflow-y-auto ${phone && !finished ? "hidden" : ""} ${finished ? "mt-10 border-t border-line pt-8" : "my-4"}`}
       >
         <li className="text-sm text-muted">{finished ? "Konuşma · " : ""}Yazılı tur sesleri metinden üretilir.</li>
         {session.turns.map((turn) => (
@@ -327,7 +402,7 @@ export function SessionPage() {
           </li>
         ))}
       </ol>
-      {!finished && isOwner && (
+      {!finished && isOwner && !phone && (
         <form
           className="shrink-0 border-t border-line pt-3"
           onSubmit={(event) => {
