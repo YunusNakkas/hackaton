@@ -30,6 +30,13 @@ export function VoiceComposer({
   const emptyRounds = useRef(0);
   const [paused, setPaused] = useState(false);
   const [manualOnly, setManualOnly] = useState(false);
+  // Önceki kayıt hâlâ gönderilirken dinleme isteği gelirse (müşteri cevabı çabuk bitti) istek kaybolmasın;
+  // gönderim bitince uygulanır. Yoksa ekranda "Seni dinliyor" yazar ama kayıt başlamazdı.
+  const wantStart = useRef(false);
+  const handsFreeNow = useRef(handsFree);
+  const disabledNow = useRef(disabled);
+  handsFreeNow.current = handsFree;
+  disabledNow.current = disabled;
 
   useEffect(() => {
     live.current = true;
@@ -67,7 +74,12 @@ export function VoiceComposer({
   }
 
   async function start() {
-    if (disabled || busy.current) return;
+    if (disabledNow.current) return;
+    if (busy.current) {
+      wantStart.current = true;
+      return;
+    }
+    wantStart.current = false;
     busy.current = true;
     setError(null);
     setQuiet(false);
@@ -120,7 +132,9 @@ export function VoiceComposer({
       setRecording(false);
       setLevel(0);
     }
-    if (retry) void start();
+    const pending = wantStart.current && handsFreeNow.current && !disabledNow.current && live.current;
+    wantStart.current = false;
+    if (retry || pending) void start();
   }
 
   const begin = useRef(start);
@@ -131,6 +145,7 @@ export function VoiceComposer({
     emptyRounds.current = 0;
     void begin.current();
     return () => {
+      wantStart.current = false;
       handle.current?.cancel();
     };
   }, [handsFree, disabled]);
@@ -179,6 +194,19 @@ export function VoiceComposer({
             className="rounded-full bg-white px-5 py-2 text-sm font-semibold text-ink"
           >
             Bitti, gönder
+          </button>
+        )}
+        {call && handsFree && !disabled && !recording && !sending && !paused && (
+          // Güvenlik ağı: dinleme sırası bizde ama kayıt başlamadıysa (tarayıcı, yarış) elle başlatılabilir.
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              void start();
+            }}
+            className="rounded-full bg-white/15 px-5 py-2 text-sm font-semibold text-white"
+          >
+            Konuşmaya başla
           </button>
         )}
         {call && paused && !recording && !disabled && (

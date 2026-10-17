@@ -132,7 +132,8 @@ export function recordUntilSilence(
   const Ctor = audioContextCtor();
   const ownContext = !sharedContext && Ctor ? new Ctor() : null;
   const audioContext = sharedContext ?? ownContext;
-  void audioContext?.resume();
+  // Safari, <audio> çalarken bağlamı "interrupted" duruma alabiliyor; her kayıtta yeniden uyandır.
+  if (audioContext && audioContext.state !== "running") void audioContext.resume().catch(() => undefined);
   const detector = createSpeechDetector(silenceMs);
   let vadUnavailable = !audioContext;
   let recorder: MediaRecorder | null = null;
