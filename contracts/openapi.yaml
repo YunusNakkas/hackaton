@@ -1019,7 +1019,11 @@ components:
         employee_turn_count: { type: integer, minimum: 0 }
         max_turns: { type: integer, minimum: 1 }
         pending_job_id:
-          description: İşlenmekte olan tur/açılış işi; sayfa yenilenince yoklamaya devam etmek için.
+          description: |
+            İşlenmekte olan veya son hata alan tur/açılış işi. Sayfa yenilenince bu iş yoklanır;
+            `error` ise ve `retryable` true ise kullanıcıya "tekrar dene" gösterilir. Kullanıcı
+            tekrar denemek yerine yeni kayıt da gönderebilir; hata alan tur transkriptte `error`
+            durumunda kalır ve müşteri cevabına/değerlendirmeye dahil edilmez.
           oneOf:
             - { $ref: "#/components/schemas/Id" }
             - { type: "null" }

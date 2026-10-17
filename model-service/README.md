@@ -1,10 +1,14 @@
 # model-service/
 
-Gemma ağırlıklarını tek kez yükleyen ayrı FastAPI servisi. Backend worker'ı buraya HTTP ile bağlanır.
+Gemma ağırlıklarını bir kez yükleyen FastAPI servisi. Backend worker'ı buraya HTTP ile bağlanır; sözleşme `contracts/model-service.yaml`.
 
-- `adapters/`: runtime adapter'ları (ilk aday Transformers). ASR, metin, görüntü desteği tek tek doğrulanır.
-- `prompts/`: sürümlü prompt dosyaları (`customer@1`, `evaluator@1`, `draft@1`).
-- `stub/`: GPU'suz geliştirme ve CI için sabit/kurallı cevaplar. Aynı arayüzü uygular.
+- `app/main.py`: tek uç `POST /v1/generate` (metin + 16 kHz WAV ses). Servis domain bilmez; prompt'lar backend'de sürümlü (`backend/app/services/prompts.py`).
+- `app/adapters/transformers_adapter.py`: Transformers runtime. Cihaz otomatik seçilir (CUDA > MPS > CPU), `PM_DEVICE` ile zorlanabilir. Aynı kod Mac ve NVIDIA'da çalışır.
+- `app/priority_lock.py`: tek üretim slotu; etkileşimli işler (priority 0) arka plan işlerinin (10) önüne geçer, çalışan üretim kesilmez.
 
-Arayüz `contracts/model-service.yaml` içinde tanımlanacak (S0 spike'ından sonra).
-Planlanan uçlar: `POST /v1/transcribe`, `POST /v1/customer-reply`, `POST /v1/evaluate`, `POST /v1/draft-training`.
+GPU'suz geliştirme için bu servis gerekmez: backend `PM_MODEL_MODE=stub` ile süreç içi sahte modeli kullanır.
+
+## Bilinen sınırlar (16 GB Mac)
+
+- E2B bf16 ~10,2 GB. Boşta kalınca ağırlıkların bir kısmı swap'e gidiyor; sonraki ilk çağrı 14–40 sn sürebiliyor. 4-bit sürüm denenecek.
+- Ses girişi en fazla 30 sn.

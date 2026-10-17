@@ -1,0 +1,35 @@
+{
+  "version": "hotel.policies@1",
+  "policies": [
+    {
+      "id": "room_type_guarantee",
+      "title": "Oda tipi garantisi",
+      "body": "Rezervasyondaki oda tipi garanti edilir. Oda tipi verilemiyorsa misafire ücretsiz bir üst kategori oda verilir; o da yoksa ilk gece ücretinin %50'si iade edilir ve ertesi gün oda değişikliği yapılır."
+    },
+    {
+      "id": "late_checkin",
+      "title": "Geç giriş",
+      "body": "Resepsiyon 24 saat açıktır. Gece 00:00'dan sonra gelen misafirin rezervasyonu iptal edilmez. Geç girişte oda hazırlığı 15 dakikayı geçerse misafire lobide ücretsiz içecek ikram edilir."
+    },
+    {
+      "id": "maintenance",
+      "title": "Arıza bildirimi",
+      "body": "Odadaki arızalar 30 dakika içinde teknik ekiple kontrol edilir. Arıza 2 saat içinde giderilemezse misafire aynı veya üst kategoride başka oda önerilir."
+    },
+    {
+      "id": "compensation",
+      "title": "Telafi yetkisi",
+      "body": "Resepsiyon çalışanı tek başına en fazla bir ücretsiz kahvaltı veya ücretsiz geç çıkış (14:00'e kadar) verebilir. Ücret iadesi ve daha büyük telafiler için ön büro müdürü onayı gerekir."
+    },
+    {
+      "id": "late_checkout",
+      "title": "Geç çıkış",
+      "body": "Standart çıkış saati 12:00'dir. Doluluk uygunsa 14:00'e kadar geç çıkış ücretsizdir, 18:00'e kadar yarım gün ücreti alınır."
+    },
+    {
+      "id": "breakfast",
+      "title": "Kahvaltı",
+      "body": "Kahvaltı yalnızca 'oda+kahvaltı' rezervasyonlarda fiyata dahildir. Diğer rezervasyonlarda kişi başı 450 TL'dir."
+    }
+  ]
+}

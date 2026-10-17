@@ -1,0 +1,254 @@
+"""Tek worker döngüsü. Model çağrıları API isteği içinde değil burada yapılır.
+
+Her aşamadan sonra durum ve ara sonuç (`job.state`) kalıcı yazılır; tekrar denemede biten
+aşamalar atlanır, böylece ses yeniden yüklenmez ve aynı cevap iki kez üretilmez.
+"""
+
+import logging
+import re
+import time
+from pathlib import Path
+
+from sqlalchemy import update
+from sqlalchemy.orm import Session
+
+from app import schemas
+from app.core.config import Settings, get_settings
+from app.core.ids import iso, utcnow
+from app.db import get_sessionmaker
+from app.models import Evaluation, Job, PracticeSession, Training, Turn
+from app.services import evaluation as evalsvc
+from app.services import prompts, tts
+from app.services.model_client import ModelClient, ModelUnavailable, get_model_client
+
+log = logging.getLogger("provamusteri.worker")
+
+
+class JobFailed(Exception):
+    def __init__(self, code: str, message: str, retryable: bool):
+        super().__init__(message)
+        self.code, self.message, self.retryable = code, message, retryable
+
+
+def _stage(db: Session, job: Job, status: str) -> None:
+    job.status = status
+    db.commit()
+
+
+def _media(settings: Settings, rel: str | Path) -> Path:
+    return settings.media_dir / rel
+
+
+def _ready_history(db: Session, session_id: str, before_index: int) -> list[Turn]:
+    return (db.query(Turn).filter(Turn.session_id == session_id, Turn.index < before_index,
+                                  Turn.status == "ready", Turn.text.is_not(None))
+            .order_by(Turn.index).all())
+
+
+_ROLE_PREFIX = re.compile(r"^\s*(müşteri|musteri|customer|ayşe hanım|assistant)\s*:\s*", re.I)
+
+
+def clean_reply(text: str) -> tuple[str, bool]:
+    ended = prompts.END_MARKER in text
+    text = text.replace(prompts.END_MARKER, "")
+    text = _ROLE_PREFIX.sub("", text.strip()).strip().strip('"').strip()
+    return text, ended
+
+
+def _synthesize_turn(settings: Settings, turn: Turn) -> None:
+    rel = Path("sessions") / turn.session_id / turn.id
+    res = tts.synthesize(settings, turn.text or "", _media(settings, rel))
+    if res is not None:
+        turn.audio_path = str(rel.with_suffix(".m4a"))
+        turn.audio_mime, turn.duration_ms = res.mime, res.duration_ms
+    turn.status = "ready"
+
+
+def process_opening(db: Session, job: Job, settings: Settings, model: ModelClient) -> dict:
+    turn = db.get(Turn, job.turn_id)
+    _stage(db, job, "synthesizing")
+    _synthesize_turn(settings, turn)
+    return {"kind": "opening", "customer_turn": schemas.turn_json(turn)}
+
+
+def process_turn(db: Session, job: Job, settings: Settings, model: ModelClient) -> dict:
+    turn = db.get(Turn, job.turn_id)
+    s = db.get(PracticeSession, job.session_id)
+    t = db.get(Training, s.training_id)
+    state = dict(job.state or {})
+
+    if "asr_text" not in state:
+        _stage(db, job, "transcribing")
+        wav = _media(settings, Path(turn.audio_path).parent / f"{turn.id}.16k.wav").read_bytes()
+        text = model.transcribe(wav, prompts.asr_prompt(t.scenario.get("asr_hints", []))).strip()
+        if not text:
+            raise JobFailed("audio_undecodable", "Konuşmanız anlaşılamadı. Lütfen tekrar kaydedin.", False)
+        state["asr_text"] = text
+        turn.text = text
+        job.state = state
+        db.commit()
+
+    if "reply_text" not in state:
+        _stage(db, job, "generating")
+        history = [(x.speaker, x.text) for x in _ready_history(db, s.id, turn.index)]
+        messages = prompts.customer_messages(t.scenario, t.policies, [*history, ("employee", turn.text)])
+        raw = model.chat(messages, max_new_tokens=120, temperature=1.0, purpose="customer_reply")
+        reply, ended = clean_reply(raw)
+        if not reply:
+            raise JobFailed("model_unavailable", "Müşteri cevabı üretilemedi. Tekrar deneyin.", True)
+        state.update(reply_text=reply, customer_ended=ended)
+        job.state = state
+        db.commit()
+
+    _stage(db, job, "synthesizing")
+    customer = db.get(Turn, state["customer_turn_id"]) if "customer_turn_id" in state else None
+    if customer is None:
+        customer = Turn(session_id=s.id, index=turn.index + 1, speaker="customer", text=state["reply_text"])
+        db.add(customer)
+        db.flush()
+        state["customer_turn_id"] = customer.id
+        job.state = state
+        db.commit()
+    customer.status = "processing"
+    _synthesize_turn(settings, customer)
+    turn.status = "ready"
+    db.flush()
+
+    done = db.query(Turn).filter_by(session_id=s.id, speaker="employee", status="ready").count()
+    return {
+        "kind": "turn",
+        "employee_turn": schemas.turn_json(turn),
+        "customer_turn": schemas.turn_json(customer),
+        "session_should_end": bool(state.get("customer_ended")) or done >= t.max_turns,
+    }
+
+
+def process_evaluation(db: Session, job: Job, settings: Settings, model: ModelClient) -> dict:
+    s = db.get(PracticeSession, job.session_id)
+    t = db.get(Training, s.training_id)
+    ev = db.get(Evaluation, s.id)
+    _stage(db, job, "evaluating")
+
+    turns = (db.query(Turn).filter(Turn.session_id == s.id, Turn.status == "ready", Turn.text.is_not(None))
+             .order_by(Turn.index).all())
+    by_label = {f"t{x.index}": evalsvc.LabeledTurn(x.id, x.speaker, x.text) for x in turns}
+    labeled = [(f"t{x.index}", x.speaker, x.text) for x in turns]
+    dim_ids = [d["id"] for d in t.rubric["dimensions"]]
+    stub_ctx = {"dimension_ids": dim_ids,
+                "employee_turns": [(f"t{x.index}", x.text) for x in turns if x.speaker == "employee"]}
+
+    messages = prompts.evaluation_messages(t.scenario, t.policies, t.rubric, labeled)
+    raw = model.chat(messages, max_new_tokens=1400, temperature=settings.eval_temperature,
+                     purpose="evaluation", stub_context=stub_ctx)
+    repaired = False
+    try:
+        data = evalsvc.parse_json_output(raw)
+        evalsvc.check_shape(data, dim_ids)
+    except evalsvc.EvaluationShapeError as first:
+        repaired = True  # yalnızca bir onarım denemesi
+        raw = model.chat(prompts.repair_messages(raw, str(first)), max_new_tokens=1400, temperature=0.2,
+                         purpose="evaluation_repair", stub_context=stub_ctx)
+        try:
+            data = evalsvc.parse_json_output(raw)
+            evalsvc.check_shape(data, dim_ids)
+        except evalsvc.EvaluationShapeError as second:
+            log.warning("değerlendirme şeması onarılamadı: %s", second)
+            raise JobFailed("internal_error", "Değerlendirme üretilemedi. Tekrar deneyebilirsiniz.", True) from second
+
+    model_run = {"model": model.model_name, "runtime": model.runtime, "prompt_version": prompts.EVALUATOR_VERSION,
+                 "generated_at": iso(utcnow()), "repaired": repaired}
+    report, status = evalsvc.build_report(
+        data, rubric=t.rubric, rubric_version=t.rubric_version, policies=t.policies, turns_by_label=by_label,
+        model_run=model_run, employee_turn_count=sum(1 for x in turns if x.speaker == "employee"))
+    ev.report, ev.status, ev.error = report, status, None
+    return {"kind": "evaluation", "session_id": s.id, "evaluation_status": status}
+
+
+HANDLERS = {"opening": process_opening, "turn": process_turn, "evaluation": process_evaluation}
+FIRST_STAGE = {"opening": "synthesizing", "turn": "transcribing", "evaluation": "evaluating"}
+
+
+def _fail(db: Session, job: Job, exc: JobFailed) -> None:
+    failed_stage = job.status if job.status not in ("queued", "ready", "error") else None
+    job.status = "error"
+    job.error = {"code": exc.code, "message": exc.message, "retryable": exc.retryable, "failed_stage": failed_stage}
+    if job.turn_id:
+        db.query(Turn).filter(Turn.id == job.turn_id).update({"status": "error"})
+    if job.kind == "turn" and "customer_turn_id" in (job.state or {}):
+        db.query(Turn).filter(Turn.id == job.state["customer_turn_id"]).update({"status": "error"})
+    if job.kind == "evaluation":
+        ev = db.get(Evaluation, job.session_id)
+        ev.status, ev.error = "error", job.error
+    db.commit()
+
+
+def run_job(db: Session, job: Job, settings: Settings, model: ModelClient) -> None:
+    try:
+        job.result = HANDLERS[job.kind](db, job, settings, model)
+        job.status = "ready"
+        db.commit()
+    except JobFailed as exc:
+        db.rollback()
+        _fail(db, db.get(Job, job.id), exc)
+    except ModelUnavailable as exc:
+        db.rollback()
+        log.warning("model servisine ulaşılamadı: %s", exc)
+        _fail(db, db.get(Job, job.id), JobFailed(
+            "model_unavailable", "Model şu an yanıt veremiyor. Kaydınız saklandı, tekrar deneyebilirsiniz.", True))
+    except tts.TtsError as exc:
+        db.rollback()
+        log.warning("TTS hatası: %s", exc)
+        _fail(db, db.get(Job, job.id), JobFailed("internal_error", "Müşteri sesi üretilemedi. Tekrar deneyin.", True))
+    except Exception:
+        db.rollback()
+        log.exception("iş başarısız: %s", job.id)
+        _fail(db, db.get(Job, job.id), JobFailed("internal_error", "Beklenmeyen bir hata oluştu.", True))
+
+
+def claim_next(db: Session) -> Job | None:
+    job = (db.query(Job).filter(Job.status == "queued", Job.kind.in_(HANDLERS))
+           .order_by(Job.priority, Job.id).first())
+    if job is None:
+        return None
+    # Koşullu güncelleme: başka bir süreç aynı işi aldıysa satır sayısı 0 olur.
+    claimed = db.execute(update(Job).where(Job.id == job.id, Job.status == "queued")
+                         .values(status=FIRST_STAGE[job.kind], updated_at=utcnow())).rowcount
+    db.commit()
+    if not claimed:
+        return None
+    db.refresh(job)
+    return job
+
+
+def recover_stale(db: Session) -> int:
+    """Worker çökmüşse yarıda kalan işleri tekrar kuyruğa alır; ara sonuçlar korunur."""
+    n = db.query(Job).filter(Job.status.in_(schemas.ACTIVE_JOB_STATES[1:])).update(
+        {"status": "queued"}, synchronize_session=False)
+    db.commit()
+    return n
+
+
+def run_once(settings: Settings | None = None, model: ModelClient | None = None) -> bool:
+    settings = settings or get_settings()
+    model = model or get_model_client(settings)
+    with get_sessionmaker()() as db:
+        job = claim_next(db)
+        if job is None:
+            return False
+        log.info("iş başladı %s %s", job.kind, job.id)
+        run_job(db, job, settings, model)
+        log.info("iş bitti %s %s -> %s", job.kind, job.id, job.status)
+        return True
+
+
+def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    settings = get_settings()
+    model = get_model_client(settings)
+    with get_sessionmaker()() as db:
+        if n := recover_stale(db):
+            log.info("%d yarım iş kuyruğa geri alındı", n)
+    log.info("worker başladı (model=%s, tts=%s)", settings.model_mode, settings.tts_provider)
+    while True:
+        if not run_once(settings, model):
+            time.sleep(settings.worker_poll_s)

@@ -1,0 +1,57 @@
+{
+  "version": "customer_service.rubric@1",
+  "dimensions": [
+    {
+      "id": "empathy",
+      "name": "Empati",
+      "description": "Müşterinin duygusunu ve sorununu fark edip buna uygun karşılık verme.",
+      "weight": 1,
+      "levels": [
+        "Müşterinin duygusunu yok saydı veya küçümsedi.",
+        "Nezaket var ama müşterinin sorununa ilgisiz.",
+        "Sorunu kabul etti ancak duyguya değinmedi.",
+        "Duyguyu açıkça kabul etti ve anlayış gösterdi.",
+        "Duyguyu kabul etti, güven verdi ve görüşme boyunca tutarlı biçimde sürdürdü."
+      ]
+    },
+    {
+      "id": "policy_accuracy",
+      "name": "Politika doğruluğu",
+      "description": "İşletme politikasını doğru, eksiksiz ve yanlış vaat vermeden aktarma.",
+      "weight": 1,
+      "levels": [
+        "Politikaya aykırı vaat verdi veya yanlış bilgi verdi.",
+        "Politikadan bahsetti ama önemli bir kısmı yanlış.",
+        "Politikanın bir kısmını doğru aktardı, önemli koşulları atladı.",
+        "Politikayı doğru aktardı, küçük bir ayrıntı eksik.",
+        "Politikayı doğru ve eksiksiz aktardı, koşulları ve süreleri belirtti."
+      ]
+    },
+    {
+      "id": "solution",
+      "name": "Çözüm odaklılık",
+      "description": "Politika sınırları içinde uygulanabilir seçenek ve net bir sonraki adım sunma.",
+      "weight": 1,
+      "levels": [
+        "Hiçbir çözüm veya sonraki adım sunmadı.",
+        "Belirsiz bir çözüm söyledi, müşteriyi başka yere yönlendirdi.",
+        "Bir seçenek sundu ama sonraki adım veya süre net değil.",
+        "Uygulanabilir bir seçenek ve net bir sonraki adım sundu.",
+        "Birden fazla uygun seçenek sundu, müşterinin tercihini sordu ve süreyi belirtti."
+      ]
+    },
+    {
+      "id": "clarity",
+      "name": "İletişim netliği",
+      "description": "Kısa, anlaşılır, kibar ve müşterinin seviyesine uygun ifade.",
+      "weight": 1,
+      "levels": [
+        "Kaba, kafa karıştırıcı veya alakasız konuştu.",
+        "Anlaşılması zor, uzun veya teknik ifadeler kullandı.",
+        "Genel olarak anlaşılır ama dağınık.",
+        "Kısa, kibar ve anlaşılır konuştu.",
+        "Çok net ve kibar; önemli bilgiyi özetleyip teyit etti."
+      ]
+    }
+  ]
+}

@@ -2,35 +2,64 @@
 
 İşletmelerin kendi politika ve ölçütleriyle çalışan sesli müşteri provası ve yönetici inceleme platformu.
 
-> Durum: iskelet. Henüz çalışan özellik yok.
+> Durum: çalışan akışı backend'de uçtan uca çalışıyor (giriş → sesli tur → değerlendirme). Admin uçları ve taslak üretimi henüz yok.
 
 ## Dizinler
 
 | Dizin | Sahibi | İçerik |
 |---|---|---|
-| `contracts/` | backend (ortak inceleme) | OpenAPI, fixture'lar, doğrulama scripti |
+| `contracts/` | backend (ortak inceleme) | Web API (`openapi.yaml`), model servisi sözleşmesi, fixture'lar |
 | `frontend/` | frontend | React + TS + Vite |
-| `backend/` | backend | FastAPI API + worker (SQLite) |
-| `model-service/` | backend | Gemma wrapper (ASR, müşteri rolü, değerlendirme, taslak) + GPU'suz stub |
-| `data/` | ortak | Senaryo, politika, rubrik, golden set |
-| `eval/` | backend | Offline model değerlendirme |
-| `docs/` | ortak | Kurulum, demo, teslim |
+| `backend/` | backend | FastAPI API + worker (SQLite, Alembic) |
+| `model-service/` | backend | Gemma'yı bir kez yükleyen servis (Transformers; MPS/CUDA/CPU) |
+| `data/` | ortak | Senaryo, politika, rubrik (mağaza + otel, 6 senaryo) |
+| `eval/` | backend | S0 ölçümleri, gerçek modelle uçtan uca test |
+| `docs/` | ortak | `s0-spike.md` ölçüm sonuçları |
 
-## Geliştirme
+## Mimari
+
+```
+tarayıcı ──HTTP/cookie──► API (FastAPI) ──SQLite (jobs tablosu)──► worker ──HTTP──► model-service (Gemma)
+                                 ▲                                    │
+                                 └──────── ses dosyaları (var/media) ◄┘── TTS (macOS say / Yelda)
+```
+
+API uzun model çağrısı yapmaz; işi kuyruğa yazar, `202 + job_id` döner. Worker işler, tarayıcı `GET /jobs/{id}` ile yoklar.
+
+## Yerel geliştirme (macOS)
 
 ```bash
-# sözleşme doğrulama
-python contracts/scripts/validate_fixtures.py
+cp .env.example .env
 
-# backend (Python 3.11+; uv yoksa venv)
+# backend (Python 3.11+)
 cd backend
 python3.12 -m venv .venv && .venv/bin/pip install -e . pytest pyyaml "jsonschema[format]" openapi-spec-validator
-.venv/bin/uvicorn app.main:app --reload   # http://localhost:8000/api/v1/health
-.venv/bin/pytest -q
-
-# compose (api + worker, model servisi stub)
-cp .env.example .env && docker compose up
+.venv/bin/alembic upgrade head && .venv/bin/python -m app.seed
+.venv/bin/uvicorn app.main:app --reload --port 8000     # terminal 1: API
+.venv/bin/python -m app.worker                          # terminal 2: worker
+.venv/bin/pytest -q                                      # testler (GPU'suz, stub model)
 ```
+
+Demo kullanıcıları (şifre `.env` içindeki `PM_DEMO_PASSWORD`, boşsa `prova1234`):
+`mehmet@demo.test` (yönetici), `elif@demo.test`, `can@demo.test` (çalışan).
+
+### Gerçek model
+
+`.env` içinde `PM_MODEL_MODE=real` yapın ve model servisini başlatın (ilk açılış ~20 sn):
+
+```bash
+cd model-service
+python3.12 -m venv .venv && .venv/bin/pip install -e .
+PYTORCH_ENABLE_MPS_FALLBACK=1 .venv/bin/uvicorn app.main:app --port 8100   # terminal 3
+```
+
+Gemma 4 E2B bf16 ~10 GB bellek kullanır; 16 GB Mac'te sınırda. Ayrıntılar: `docs/s0-spike.md`.
+
+Uçtan uca duman testi (geçici veritabanı kullanır): `backend/.venv/bin/python eval/e2e_real.py`
+
+### Frontend için
+
+Frontend geliştirmesi gerçek modeli beklemez: `PM_MODEL_MODE=stub` ile API gerçek davranır, model cevapları `[stub]` etiketlidir. `/api/v1/health` → `model_service: "stub"`.
 
 ## Lisans
 

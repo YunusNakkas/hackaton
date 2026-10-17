@@ -1,0 +1,76 @@
+{
+  "version": "retail.scenarios@1",
+  "sector": "retail",
+  "policy_file": "retail.json",
+  "rubric_file": "customer_service.json",
+  "scenarios": [
+    {
+      "key": "return_no_receipt",
+      "title": "Fişsiz iade talebi",
+      "difficulty": "medium",
+      "summary": "Müşteri, fişini kaybettiği montu iade etmek istiyor ve sinirli.",
+      "estimated_minutes": 5,
+      "max_turns": 8,
+      "customer": {
+        "name": "Ayşe Hanım",
+        "context": "Üç hafta önce mont almış, fişi yok, kart ekstresi telefonunda.",
+        "mood": "Sinirli ve aceleci ama kaba değil.",
+        "hidden_goal": "Parasını kartına geri almak istiyor; hediye çeki teklif edilirse itiraz eder. Süre net söylenirse sakinleşir."
+      },
+      "opening_line": "Merhaba, bu montu iade etmek istiyorum ama fişim yok. Kart ekstrem telefonumda var.",
+      "success_criteria": [
+        "Müşterinin sıkıntısını kabul etmek",
+        "Kart ekstresiyle POS kaydı aranacağını söylemek",
+        "Kayıt bulunursa karta iade ve 3 iş günü süresini belirtmek",
+        "Kayıt bulunmazsa hediye çeki seçeneğini dürüstçe açıklamak"
+      ],
+      "visible_policy_ids": ["return_window"],
+      "asr_hints": ["iade", "fiş", "ekstre", "kart", "kayıt", "hediye çeki", "POS"]
+    },
+    {
+      "key": "expired_return",
+      "title": "İade süresi geçmiş ürün",
+      "difficulty": "hard",
+      "summary": "Müşteri 45 gün önce aldığı ayakkabıyı iade etmek istiyor ve kural dışı istisna talep ediyor.",
+      "estimated_minutes": 6,
+      "max_turns": 10,
+      "customer": {
+        "name": "Murat Bey",
+        "context": "45 gün önce ayakkabı almış, hiç giymemiş, fişi var.",
+        "mood": "Kendinden emin, ısrarcı; 'sadık müşteriyim' diyor.",
+        "hidden_goal": "Para iadesi istiyor ama makul bir değişim teklifini ve müdürle görüşme önerisini kabul eder. Çalışan yetkisi dışında vaat verirse onu yakalar."
+      },
+      "opening_line": "İyi günler, bu ayakkabıyı iade edeceğim. Hiç giymedim, fişi de burada.",
+      "success_criteria": [
+        "30 gün kuralını kibarca ve net söylemek",
+        "Yetkisi dışında iade vaat etmemek",
+        "Müdür onayıyla değişim seçeneğini sunmak",
+        "Sadakatini takdir ettiğini göstermek"
+      ],
+      "visible_policy_ids": ["return_window"],
+      "asr_hints": ["iade", "değişim", "fiş", "müdür", "gün"]
+    },
+    {
+      "key": "defective_exchange",
+      "title": "Kusurlu ürün değişimi",
+      "difficulty": "easy",
+      "summary": "Müşteri bir hafta önce aldığı ceketin fermuarının bozulduğunu söylüyor.",
+      "estimated_minutes": 4,
+      "max_turns": 6,
+      "customer": {
+        "name": "Zeynep Hanım",
+        "context": "Bir hafta önce ceket almış, fermuar ilk kullanımda bozulmuş.",
+        "mood": "Hayal kırıklığına uğramış ama sakin.",
+        "hidden_goal": "Aynı ceketi istiyor; stok yoksa para iadesini tercih eder."
+      },
+      "opening_line": "Merhaba, geçen hafta bu ceketi aldım ama fermuarı ilk giyişte bozuldu.",
+      "success_criteria": [
+        "Özür dilemek ve sorunu kabul etmek",
+        "Garanti kapsamında hemen değişim teklif etmek",
+        "Stok yoksa iade veya başka ürün seçeneğini sunmak"
+      ],
+      "visible_policy_ids": [],
+      "asr_hints": ["fermuar", "ceket", "değişim", "garanti", "stok"]
+    }
+  ]
+}

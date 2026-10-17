@@ -1,0 +1,76 @@
+{
+  "version": "hotel.scenarios@1",
+  "sector": "hotel",
+  "policy_file": "hotel.json",
+  "rubric_file": "customer_service.json",
+  "scenarios": [
+    {
+      "key": "late_checkin_room_type",
+      "title": "Geç check-in ve oda tipi",
+      "difficulty": "hard",
+      "summary": "Gece yarısı gelen misafir, rezervasyonundaki deniz manzaralı odanın verilmediğini söylüyor.",
+      "estimated_minutes": 6,
+      "max_turns": 10,
+      "customer": {
+        "name": "Selin Hanım",
+        "context": "Deniz manzaralı oda rezerve etmiş, gece 00:30'da gelmiş, kendisine arka cephe oda verilmek isteniyor.",
+        "mood": "Çok yorgun ve sinirli.",
+        "hidden_goal": "Bu gece rahat bir oda istiyor. Ücretsiz üst kategori oda teklif edilirse hemen kabul eder; sadece 'yarın bakarız' denirse öfkelenir."
+      },
+      "opening_line": "İyi akşamlar. Rezervasyonumda deniz manzaralı oda yazıyor ama bana arka cephe verildi. Bu kabul edilemez.",
+      "success_criteria": [
+        "Yorgunluğunu ve haklılığını kabul etmek",
+        "Oda tipi garantisini doğru uygulamak: önce ücretsiz üst kategori",
+        "Üst kategori yoksa %50 iade ve ertesi gün değişikliği söylemek",
+        "Yetkisi dışında iade vaat etmemek"
+      ],
+      "visible_policy_ids": [],
+      "asr_hints": ["rezervasyon", "deniz manzaralı", "oda", "üst kategori", "resepsiyon"]
+    },
+    {
+      "key": "broken_ac",
+      "title": "Arızalı klima şikâyeti",
+      "difficulty": "medium",
+      "summary": "Misafir odanın kliması çalışmadığı için ikinci kez resepsiyonu arıyor.",
+      "estimated_minutes": 5,
+      "max_turns": 8,
+      "customer": {
+        "name": "Kerem Bey",
+        "context": "Odadaki klima çalışmıyor, iki saat önce bildirmiş ama kimse gelmemiş.",
+        "mood": "Sabrı tükenmiş, iğneleyici.",
+        "hidden_goal": "Somut bir süre ve oda değişikliği seçeneği istiyor; küçük bir telafi teklif edilirse memnun kalır."
+      },
+      "opening_line": "Odamın kliması hâlâ çalışmıyor. İki saat önce söyledim, kimse gelmedi.",
+      "success_criteria": [
+        "Gecikme için özür dilemek",
+        "2 saati geçtiği için oda değişikliği önermek",
+        "Yetkisi dahilinde telafi (kahvaltı veya geç çıkış) sunmak",
+        "Net süre vermek"
+      ],
+      "visible_policy_ids": [],
+      "asr_hints": ["klima", "teknik ekip", "oda değişikliği", "kahvaltı", "geç çıkış"]
+    },
+    {
+      "key": "late_checkout",
+      "title": "Geç çıkış talebi",
+      "difficulty": "easy",
+      "summary": "Misafir uçağı akşam olduğu için saat 17:00'ye kadar odada kalmak istiyor.",
+      "estimated_minutes": 4,
+      "max_turns": 6,
+      "customer": {
+        "name": "Deniz Bey",
+        "context": "Uçağı 20:00'de, 17:00'ye kadar odada kalmak istiyor.",
+        "mood": "Kibar ve rahat.",
+        "hidden_goal": "Ücretsiz olursa çok sevinir; yarım gün ücretini makul bulur ama önceden bilmek ister."
+      },
+      "opening_line": "Merhaba, uçağım akşam sekizde. Odada saat beşe kadar kalabilir miyim?",
+      "success_criteria": [
+        "14:00'e kadar ücretsiz, 18:00'e kadar yarım gün ücretini doğru söylemek",
+        "Doluluğu kontrol edeceğini belirtmek",
+        "Alternatif (bagaj saklama, lobi) önermek"
+      ],
+      "visible_policy_ids": ["late_checkout"],
+      "asr_hints": ["geç çıkış", "yarım gün", "uçak", "bagaj"]
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "version": "retail.policies@1",
+  "policies": [
+    {
+      "id": "return_window",
+      "title": "İade süresi",
+      "body": "Kullanılmamış ve etiketi üzerinde olan ürünler satın alma tarihinden itibaren 30 gün içinde iade edilebilir. 30 günü geçen ürünler iade alınmaz; mağaza müdürü onayıyla yalnızca değişim yapılabilir."
+    },
+    {
+      "id": "return_without_receipt",
+      "title": "Fişsiz iade",
+      "body": "Fiş yoksa kartlı ödemede POS kaydı kart ekstresiyle aranır. Kayıt bulunursa iade karta yapılır ve 3 iş günü içinde hesaba yansır. Kayıt bulunamazsa veya ödeme nakitse yalnızca mağaza hediye çeki verilebilir."
+    },
+    {
+      "id": "refund_method",
+      "title": "İade yöntemi",
+      "body": "İade, ödemenin yapıldığı yönteme yapılır. Kartla ödenen tutar nakit olarak geri verilmez."
+    },
+    {
+      "id": "defective_item",
+      "title": "Kusurlu ürün",
+      "body": "Üretim hatalı ürünler 2 yıl garanti kapsamındadır. Stok varsa aynı ürünle hemen değiştirilir; stok yoksa müşteri bedel iadesi veya başka ürün seçebilir."
+    },
+    {
+      "id": "escalation",
+      "title": "Yöneticiye aktarma",
+      "body": "Çalışan politikanın dışına çıkamaz. İstisna gereken durumlarda müşteriye vaat vermeden mağaza müdürüne aktarır ve müşteriye ne zaman dönüş yapılacağını söyler."
+    }
+  ]
+}

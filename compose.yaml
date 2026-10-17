@@ -1,28 +1,32 @@
-# Web/API/worker. Gerçek model servisi GPU'ya bağlı olduğundan host üzerinde ayrı çalışır
-# (PM_MODEL_SERVICE_URL=http://host.docker.internal:8100); varsayılan profil stub kullanır.
+# API + worker. Varsayılan olarak GPU'suz stub modelle çalışır (PM_MODEL_MODE=stub).
+#
+# Gerçek model ve yerel TTS (macOS `say`) host'a bağlı olduğundan Mac'te geliştirme için
+# Docker yerine README'deki yerel komutlar önerilir. Gerçek modeli compose'dan kullanmak için:
+#   PM_MODEL_MODE=real PM_MODEL_SERVICE_URL=http://host.docker.internal:8100 docker compose up
+# (worker container'ında `say` olmadığından PM_TTS_PROVIDER=none kalmalı.)
 services:
   api:
     build: ./backend
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    command: sh -c "alembic upgrade head && python -m app.seed && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     env_file: .env
     environment:
-      PM_MODEL_SERVICE_URL: ${PM_MODEL_SERVICE_URL:-http://model-stub:8100}
+      PM_DATABASE_URL: sqlite:////app/var/provamusteri.sqlite3
+      PM_MEDIA_DIR: /app/var/media
     ports: ["8000:8000"]
-    volumes: ["pm-var:/app/var"]
+    volumes:
+      - pm-var:/app/var
+      - ./data:/data:ro
 
   worker:
     build: ./backend
     command: python -m app.worker
     env_file: .env
     environment:
-      PM_MODEL_SERVICE_URL: ${PM_MODEL_SERVICE_URL:-http://model-stub:8100}
+      PM_DATABASE_URL: sqlite:////app/var/provamusteri.sqlite3
+      PM_MEDIA_DIR: /app/var/media
+      PM_TTS_PROVIDER: none
     volumes: ["pm-var:/app/var"]
     depends_on: [api]
-
-  model-stub:
-    build: ./model-service
-    command: uvicorn stub.app:app --host 0.0.0.0 --port 8100
-    profiles: [stub]
 
 volumes:
   pm-var:

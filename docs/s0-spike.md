@@ -46,6 +46,24 @@ Tahmini tur süresi (çalışan konuşmayı bitirdikten sonra): ASR ~1 sn + ceva
 - **Yedek:** bellek sorunu demoda tekrarlarsa resmî 4-bit QAT sürümü (`gemma-4-E2B-it-qat-*` / E4B GGUF 6,1 GB) ölçülecek.
 - **E4B bf16 (16 GB) ve 12B bu makinede kullanılamaz.**
 
+## Uçtan uca deneme (gerçek model + Yelda TTS)
+
+`eval/e2e_real.py`: çalışan sesi Yelda ile `audio/mp4` (Safari biçimi) üretilip API'ye yüklendi; worker gerçek Gemma ile işledi.
+
+| Adım | Süre |
+|---|---|
+| Açılış sesi (TTS) | 0,9–1,1 sn |
+| Tur (ASR + cevap + TTS), sıcak | 3,6–6,1 sn |
+| Tur, ilk sesli istek (yalnız metinle ısınınca) | 27,7 sn → ısınmaya sessiz ses eklendi |
+| Tur, boşta bekledikten sonra | **41,8 sn** (ASR tek başına 39,5 sn) |
+| Değerlendirme (1130 token) | 54 sn |
+
+Bulgular:
+1. **Swap sorunu:** Model boşta kalınca ağırlıkların bir kısmı swap'e gidiyor (swap 6,3 GB, boş bellek ~0,9 GB). Aynı ASR çağrısı 8 kez art arda: ilk çağrı 14 sn, sonrakiler 0,8 sn. Çalışan her turdan önce konuşacağı için bu gecikme gerçek kullanımda tekrarlanabilir. **4-bit model bu makinede P0 ihtiyacı haline geldi.**
+2. **Kanıt doğrulaması işe yaradı:** model bir koşuda müşteri cümlesini çalışan kanıtı olarak gösterdi; rapor `unverified_evidence` ile `needs_review` oldu.
+3. **ASR sözlük ipucu "kayıt → kayıp" hatasını düzeltmedi.** Başka yaklaşım (ör. senaryo bağlamını prompt'a eklemek) denenecek.
+4. Müşteri personası rolünde kaldı ve politikayı zorladı ("Üç iş günü çok uzun").
+
 ## Sırada
 
 - [ ] Gerçek mikrofon kayıtlarıyla ASR (5–10 kayıt, farklı kişiler)
@@ -53,4 +71,4 @@ Tahmini tur süresi (çalışan konuşmayı bitirdikten sonra): ASR ~1 sn + ceva
 - [ ] ElevenLabs Türkçe TTS gecikmesi ve kalitesi
 - [ ] Değerlendirmede temperature 0,3 ile tutarlılık
 - [ ] 15 tur art arda ısınma/yavaşlama testi
-- [ ] 4-bit QAT sürümünün bellek/kalite karşılaştırması
+- [ ] **4-bit sürümün bellek/kalite karşılaştırması (öncelikli: swap sorunu)**
