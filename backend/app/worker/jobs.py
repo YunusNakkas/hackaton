@@ -49,11 +49,22 @@ def _ready_history(db: Session, session_id: str, before_index: int) -> list[Turn
 _ROLE_PREFIX = re.compile(r"^\s*(müşteri|musteri|customer|ayşe hanım|assistant)\s*:\s*", re.I)
 
 
+def _drop_unbalanced(text: str, *pair: str) -> str:
+    # Model bazen tırnağın yalnız birini yazıyor ('Hemen" sizin için...'); eşleşmeyen tırnak ekranda ve
+    # seslendirmede anlamsız. Dengeli tırnaklar (gerçek alıntı) korunur.
+    count = sum(text.count(ch) for ch in pair)
+    balanced = count % 2 == 0 if len(pair) == 1 else text.count(pair[0]) == text.count(pair[1])
+    return text if balanced else "".join(ch for ch in text if ch not in pair)
+
+
 def clean_reply(text: str) -> tuple[str, bool]:
     ended = prompts.END_MARKER in text
     text = text.replace(prompts.END_MARKER, "")
-    text = _ROLE_PREFIX.sub("", text.strip()).strip().strip('"').strip()
-    return text, ended
+    text = _ROLE_PREFIX.sub("", text.strip()).strip()
+    if len(text) > 1 and text[0] == text[-1] == '"':  # yalnız cümleyi saran tırnak çifti
+        text = text[1:-1].strip()
+    text = _drop_unbalanced(_drop_unbalanced(text, '"'), "“", "”")
+    return " ".join(text.split()), ended
 
 
 # Anlatıcı/koç gibi konuşan cevaplar (gerçek mikrofon denemesinde görüldü:
@@ -119,7 +130,10 @@ def process_turn(db: Session, job: Job, settings: Settings, model: ModelClient) 
     if "reply_text" not in state:
         _stage(db, job, "generating")
         history = [(x.speaker, x.text) for x in _ready_history(db, s.id, turn.index)]
-        messages = prompts.customer_messages(t.scenario, t.policies, [*history, ("employee", turn.text)])
+        adaptive = ""
+        if s.practice_mode == "adaptive":
+            adaptive = prompts.adaptive_instructions(t.rubric, s.practice_focus or [])
+        messages = prompts.customer_messages(t.scenario, t.policies, [*history, ("employee", turn.text)], adaptive)
         stub_ctx = {"scenario": t.scenario, "employee_text": turn.text or "", "history": history}
         reply, ended = clean_reply(model.chat(
             messages, max_new_tokens=120, temperature=1.0, purpose="customer_reply", stub_context=stub_ctx))
@@ -178,7 +192,7 @@ def process_evaluation(db: Session, job: Job, settings: Settings, model: ModelCl
     stub_ctx = {"dimension_ids": dim_ids,
                 "employee_turns": [(f"t{x.index}", x.text) for x in turns if x.speaker == "employee"]}
 
-    messages = prompts.evaluation_messages(t.scenario, t.policies, t.rubric, labeled)
+    messages = prompts.evaluation_messages(t.scenario, t.policies, t.rubric, labeled, s.practice_focus or [])
     raw = model.chat(messages, max_new_tokens=1400, temperature=settings.eval_temperature,
                      purpose="evaluation", stub_context=stub_ctx)
     repaired = False
@@ -200,7 +214,8 @@ def process_evaluation(db: Session, job: Job, settings: Settings, model: ModelCl
                  "generated_at": iso(utcnow()), "repaired": repaired}
     report, status = evalsvc.build_report(
         data, rubric=t.rubric, rubric_version=t.rubric_version, policies=t.policies, turns_by_label=by_label,
-        model_run=model_run, employee_turn_count=sum(1 for x in turns if x.speaker == "employee"))
+        model_run=model_run, employee_turn_count=sum(1 for x in turns if x.speaker == "employee"),
+        focus_ids=s.practice_focus or [])
     ev.report, ev.status, ev.error = report, status, None
     return {"kind": "evaluation", "session_id": s.id, "evaluation_status": status}
 
@@ -210,39 +225,36 @@ def process_draft(db: Session, job: Job, settings: Settings, model: ModelClient)
     _stage(db, job, "generating")
     policies = draftsvc.form_policies(draft.form)
     ctx = {"form": draft.form, "policies": policies}
-    extra_scenarios = 0
+    requested = draft.form["scenario_count"]
 
-    def validate_generated(raw: str) -> draftsvc.GeneratedPart:
-        nonlocal extra_scenarios
-        part = draftsvc.GeneratedPart.model_validate(evalsvc.parse_json_output(raw))
-        expected_count = draft.form["scenario_count"]
-        if len(part.scenarios) > expected_count:
-            extra_scenarios = len(part.scenarios) - expected_count
-            part.scenarios = part.scenarios[:expected_count]
-        elif len(part.scenarios) < expected_count:
+    def parse(text: str):
+        # Biçim onarımı (anahtar, seviye, sızan kimlik, fazla senaryo) kodda; eksik senaryo ise modelden
+        # bir kez daha istenir (onarım çağrısı), çünkü eksik senaryoyu kod tamamlayamaz.
+        fixed, notes = draftsvc.repair_generated(evalsvc.parse_json_output(text), policies, requested)
+        part = draftsvc.GeneratedPart.model_validate(fixed)
+        if len(part.scenarios) < requested:
             raise evalsvc.EvaluationShapeError(
-                f"scenarios: Tam olarak {expected_count} senaryo üretmelisin; "
-                f"{len(part.scenarios)} senaryo üretildi. Fazla senaryoları kaldır veya eksikleri tamamla.")
-        return part
+                f"scenarios: Tam olarak {requested} senaryo üretmelisin; "
+                f"{len(part.scenarios)} senaryo üretildi. Eksik senaryoları tamamla.")
+        return part, notes
 
     raw = model.chat(prompts.draft_messages(draft.form, policies), max_new_tokens=2000, temperature=1.0,
                      purpose="draft", stub_context=ctx)
     try:
-        part = validate_generated(raw)
+        part, notes = parse(raw)
     except (evalsvc.EvaluationShapeError, draftsvc.ValidationError) as first:
         problem = draftsvc.validation_problem(first) if isinstance(first, draftsvc.ValidationError) else str(first)
         raw = model.chat(prompts.repair_messages(raw, problem), max_new_tokens=2000, temperature=0.2,
                          purpose="draft_repair", stub_context=ctx)
         try:
-            part = validate_generated(raw)
+            part, notes = parse(raw)
         except (evalsvc.EvaluationShapeError, draftsvc.ValidationError) as second:
             log.warning("taslak şeması onarılamadı: %s", second)
             raise JobFailed("internal_error", "Taslak üretilemedi. Tekrar deneyebilirsiniz.", True) from second
     content = {"scenarios": [s.model_dump() for s in part.scenarios], "policies": policies,
                "rubric": part.rubric.model_dump()}
-    draft.content, draft.warnings, draft.status = content, draftsvc.warnings_for(content), "ready"
-    if extra_scenarios:
-        draft.warnings = [*draft.warnings, "Modelin ürettiği ek senaryolar çıkarılarak istediğiniz sayıda senaryo hazırlandı."]
+    draft.content, draft.status = content, "ready"
+    draft.warnings = notes + draftsvc.warnings_for(content)
     return {"kind": "draft_generation", "draft_id": draft.id}
 
 
@@ -291,6 +303,15 @@ def run_job(db: Session, job: Job, settings: Settings, model: ModelClient) -> No
         _fail(db, db.get(Job, job.id), JobFailed("internal_error", "Beklenmeyen bir hata oluştu.", True))
 
 
+def first_stage(db: Session, job: Job) -> str:
+    """Yazılı turda (ses yok) veya ASR'si önceden bitmiş tekrar denemede `transcribing` gösterilmez."""
+    if job.kind == "turn":
+        turn = db.get(Turn, job.turn_id)
+        if "asr_text" in (job.state or {}) or (turn is not None and turn.audio_path is None):
+            return "generating"
+    return FIRST_STAGE[job.kind]
+
+
 def claim_next(db: Session) -> Job | None:
     job = (db.query(Job).filter(Job.status == "queued", Job.kind.in_(HANDLERS))
            .order_by(Job.priority, Job.id).first())
@@ -298,7 +319,7 @@ def claim_next(db: Session) -> Job | None:
         return None
     # Koşullu güncelleme: başka bir süreç aynı işi aldıysa satır sayısı 0 olur.
     claimed = db.execute(update(Job).where(Job.id == job.id, Job.status == "queued")
-                         .values(status=FIRST_STAGE[job.kind], updated_at=utcnow())).rowcount
+                         .values(status=first_stage(db, job), updated_at=utcnow())).rowcount
     db.commit()
     if not claimed:
         return None

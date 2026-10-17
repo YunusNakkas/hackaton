@@ -1,5 +1,6 @@
 import uuid
 from pathlib import Path
+from typing import Literal
 
 from fastapi import APIRouter, Depends, File, Form, Response, UploadFile
 from fastapi.responses import FileResponse
@@ -21,11 +22,19 @@ from app.services.prompts import CUSTOMER_VERSION
 router = APIRouter(tags=["sessions"])
 
 
+class PracticeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    of_session_id: str
+    mode: Literal["same", "adaptive"]
+    focus_dimension_ids: list[str] = Field(min_length=1, max_length=3)
+
+
 class CreateSessionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     training_id: str
     assignment_id: str | None = None
     client_request_id: uuid.UUID
+    practice: PracticeRequest | None = None
 
 
 class SubmitMessageRequest(BaseModel):
@@ -59,6 +68,24 @@ def _session_body(db: Session, s: PracticeSession) -> dict:
     return schemas.session_json(db, s, ev_status, review_status)
 
 
+def _check_practice(db: Session, user: User, t: Training, p: PracticeRequest) -> PracticeRequest:
+    prev = db.get(PracticeSession, p.of_session_id)
+    if prev is None or prev.employee_id != user.id:
+        raise not_found("Önceki oturum")
+    ev = db.get(Evaluation, prev.id)
+    if ev is None or ev.status not in ("ready", "needs_review"):
+        raise conflict("evaluation_not_ready", "Tekrar için önceki görüşmenin raporu çıkmış olmalı.")
+    if prev.training_id != t.id:
+        raise ApiError(422, "validation_error", "Tekrar aynı eğitimle yapılmalı.",
+                       {"fields": {"practice.of_session_id": "Farklı eğitime ait"}})
+    known = {d["id"] for d in t.rubric["dimensions"]}
+    unknown = [f for f in p.focus_dimension_ids if f not in known]
+    if unknown or len(set(p.focus_dimension_ids)) != len(p.focus_dimension_ids):
+        raise ApiError(422, "validation_error", "Odak boyutları bu eğitimin rubriğinde yok veya tekrar ediyor.",
+                       {"fields": {"practice.focus_dimension_ids": ", ".join(unknown) or "tekrar eden değer"}})
+    return p
+
+
 @router.post("/sessions", status_code=201)
 def create_session(body: CreateSessionRequest, response: Response,
                    user: User = Depends(current_user), db: Session = Depends(get_db)):
@@ -82,10 +109,15 @@ def create_session(body: CreateSessionRequest, response: Response,
         if assignment.status == "completed":
             raise conflict("conflict", "Bu atama zaten tamamlanmış.")
 
+    practice = _check_practice(db, user, t, body.practice) if body.practice else None
     settings = get_settings()
+    adaptive = practice is not None and practice.mode == "adaptive"
     s = PracticeSession(org_id=user.org_id, training_id=t.id, employee_id=user.id,
-                        assignment_id=assignment.id if assignment else None,
-                        client_request_id=crid, prompt_version=CUSTOMER_VERSION)
+                        assignment_id=assignment.id if assignment else None, client_request_id=crid,
+                        prompt_version=CUSTOMER_VERSION + ("+adaptive" if adaptive else ""),
+                        practice_of_session_id=practice.of_session_id if practice else None,
+                        practice_mode=practice.mode if practice else None,
+                        practice_focus=practice.focus_dimension_ids if practice else None)
     db.add(s)
     db.flush()
     needs_audio = settings.tts_provider != "none"

@@ -40,3 +40,22 @@ GET  /jobs/{job_id}  (poll_after_ms aralığıyla)
 POST /sessions/{id}/finish         → 202 {evaluation_job_id}
 GET  /sessions/{id}/evaluation     → pending | ready | needs_review | error
 ```
+
+## Sürüm notları
+
+### v0.2.0
+- **Tekrar dene:** `POST /sessions` isteğine isteğe bağlı `practice` (`of_session_id`, `mode: same | adaptive`, `focus_dimension_ids`).
+  Rapordaki iki düğme: *Aynı senaryoyu tekrar dene* (`same`) ve *Zorlaştırılmış tekrar* (`adaptive`). Odak boyutlar için
+  önceki raporun `practice_drill.focus_dimension_ids` değeri kullanılır. Açılış cümlesi senaryodan aynen gelir; zorlaştırma
+  müşterinin sonraki cevaplarında başlar.
+- `Session.practice` (ekranda "Bu sefer şuna odaklan"), `SessionSummary.practice_mode`, `EvaluationReport.focus_dimension_ids` eklendi (zorunlu; normal oturumda `null` / `[]`).
+- **Fotoğraftan politika çıkarma:** `POST /admin/policy-extractions` (1–3 fotoğraf), `GET /admin/policy-extractions/{id}`,
+  `GET .../images/{imageId}`. Yeni iş türü `policy_extraction`, yeni hata kodu `image_undecodable`.
+  *Backend'de henüz uygulanmadı; fixture'larla mock'lanabilir.*
+- Fixture'lar: `sessions.practice_adaptive.json`, `admin.policy_extraction.{processing,ready}.json`, `jobs.policy_extraction.ready.json`.
+
+### v0.1.2
+- `no_speech` hata kodu (sessiz kayıt).
+
+### v0.1.1
+- Ses kaydı en fazla 30 sn; `pending_job_id` hata alan son işi de gösterir.

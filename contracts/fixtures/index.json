@@ -23,5 +23,9 @@
   "admin.employee_detail.json": "EmployeeDetail",
   "admin.training_draft.generating.json": "TrainingDraft",
   "admin.training_draft.ready.json": "TrainingDraft",
-  "evaluation.ready.json": "EvaluationEnvelope"
+  "evaluation.ready.json": "EvaluationEnvelope",
+  "sessions.practice_adaptive.json": "Session",
+  "admin.policy_extraction.processing.json": "PolicyExtraction",
+  "admin.policy_extraction.ready.json": "PolicyExtraction",
+  "jobs.policy_extraction.ready.json": "Job"
 }

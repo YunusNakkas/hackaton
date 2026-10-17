@@ -6,7 +6,8 @@ import type { EvaluationEnvelope, Job, Me, Session, TurnAccepted } from "../api/
 import { Clip } from "../components/Clip";
 import { ReportView } from "../components/ReportView";
 import { ReviewModal } from "../components/ReviewModal";
-import { evaluationLabel, jobLabel, speakerLabel } from "../lib/labels";
+import { evaluationLabel, formatClock, jobLabel, speakerLabel } from "../lib/labels";
+import { extensionFor, recordOnce, supportedMime } from "../lib/recorder";
 
 const ACTIVE = new Set(["queued", "transcribing", "generating", "synthesizing", "evaluating"]);
 
@@ -22,6 +23,10 @@ export function SessionPage() {
   const [shouldEnd, setShouldEnd] = useState(false);
   const requestId = useRef<{ id: string; text: string } | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const stopRecording = useRef<(() => void) | null>(null);
+  const canRecord = typeof MediaRecorder !== "undefined" && Boolean(navigator.mediaDevices?.getUserMedia);
 
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<Me>("/me") });
 
@@ -115,6 +120,49 @@ export function SessionPage() {
     }
   }
 
+  // Sayfadan çıkılırsa mikrofon açık kalmasın.
+  useEffect(() => () => stopRecording.current?.(), []);
+
+  async function sendRecording() {
+    setNotice(null);
+    setElapsed(0);
+    setRecording(true);
+    const handle = recordOnce(30_000, setElapsed);
+    stopRecording.current = handle.stop;
+    try {
+      const taken = await handle.done;
+      setRecording(false);
+      stopRecording.current = null;
+      if (taken.durationMs < 500) {
+        setNotice("Biraz daha konuş, en az yarım saniye.");
+        return;
+      }
+      setSending(true);
+      const body = new FormData();
+      const mime = taken.blob.type || supportedMime() || "audio/webm";
+      body.append("audio", taken.blob, `cevap.${extensionFor(mime)}`);
+      body.append("client_request_id", crypto.randomUUID());
+      body.append("client_duration_ms", String(taken.durationMs));
+      await api<TurnAccepted>(`/sessions/${sessionId}/turns`, { method: "POST", body });
+      await queryClient.invalidateQueries({ queryKey: ["session", sessionId] });
+    } catch (error) {
+      setRecording(false);
+      stopRecording.current = null;
+      const denied = error instanceof DOMException && (error.name === "NotAllowedError" || error.name === "NotFoundError");
+      setNotice(
+        denied
+          ? "Mikrofona erişilemedi. Tarayıcı iznini kontrol et ya da yazarak cevap ver."
+          : isApiError(error)
+            ? error.code === "no_speech"
+              ? `${error.message} İstersen yazarak da gönderebilirsin.`
+              : error.message
+            : "Kayıt gönderilemedi.",
+      );
+    } finally {
+      setSending(false);
+    }
+  }
+
   async function retryJob() {
     if (!liveJobId) return;
     setNotice(null);
@@ -165,7 +213,8 @@ export function SessionPage() {
   const isOwner = me.data?.user.id === session.employee.id;
   const evalStatus = evaluation.data?.status ?? session.evaluation_status;
   const atLimit = session.employee_turn_count >= session.max_turns;
-  const canSend = isOwner && !finished && !atLimit && !sending && !jobBusy;
+  const canSend = isOwner && !finished && !atLimit && !sending && !jobBusy && !recording;
+  const noSpeech = job?.status === "error" && job.error?.code === "no_speech";
 
   return (
     <div
@@ -285,17 +334,21 @@ export function SessionPage() {
         >
           <div className="py-3">
             <p className="mb-2 text-sm text-muted">
-              {sending
+              {recording
+                ? `Kayıtta ${formatClock(elapsed)} / 0:30 · bitirmek için tekrar bas`
+                : sending
                 ? "Gönderiliyor…"
                 : jobBusy && job
                   ? jobLabel[job.status]
                   : job?.status === "error"
-                    ? job.error?.message
+                    ? `${job.error?.message ?? ""}${noSpeech ? " İstersen yazarak da gönderebilirsin." : ""}`
                     : shouldEnd
                       ? "Müşteri konuşmayı kapattı. İstersen bitir."
                       : atLimit
                         ? "Tur doldu. Değerlendirme için bitir."
-                        : "Yaz, Enter ile gönder."}
+                        : canRecord
+                          ? "Mikrofona basıp konuş ya da yaz, Enter ile gönder."
+                          : "Yaz, Enter ile gönder."}
               {notice ? <span className="text-accent"> {notice}</span> : null}
               {job?.status === "error" && job.error?.retryable && (
                 <button type="button" onClick={() => void retryJob()} className="ml-2 underline">
@@ -304,6 +357,20 @@ export function SessionPage() {
               )}
             </p>
             <div className="flex items-end gap-2">
+              {canRecord && (
+                <button
+                  type="button"
+                  disabled={!canSend && !recording}
+                  onClick={() => (recording ? stopRecording.current?.() : void sendRecording())}
+                  aria-label={recording ? "Kaydı bitir ve gönder" : "Konuşarak cevap ver"}
+                  title={recording ? "Kaydı bitir ve gönder" : "Konuşarak cevap ver"}
+                  className={`grid h-12 w-12 shrink-0 place-items-center rounded-full text-paper disabled:opacity-40 ${
+                    recording ? "bg-accent" : "bg-ink"
+                  }`}
+                >
+                  <span className={recording ? "h-3.5 w-3.5 rounded-sm bg-paper" : "h-3.5 w-3.5 rounded-full bg-accent"} />
+                </button>
+              )}
               <textarea
                 value={draft}
                 rows={2}

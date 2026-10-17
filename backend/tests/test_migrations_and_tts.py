@@ -27,3 +27,32 @@ def test_local_tts_produces_playable_audio(tmp_path):
     res = synthesize(Settings(tts_provider="local"), "Merhaba, iade için geldim.", tmp_path / "x")
     assert res is not None and res.path.exists() and res.path.stat().st_size > 1000
     assert res.mime == "audio/mp4" and 500 < res.duration_ms < 10_000
+
+
+def test_migrations_upgrade_populated_database(tmp_path):
+    """Dolu tabloda batch migration: FK kontrolü açıkken referans alan tablo yeniden kurulamıyordu."""
+    import sqlite3
+
+    db = tmp_path / "dolu.sqlite3"
+    env = {"PM_DATABASE_URL": f"sqlite:///{db}", "PATH": "/usr/bin:/bin"}
+    alembic = [sys.executable, "-m", "alembic"]
+    run = lambda *a: subprocess.run([*alembic, *a], cwd=BACKEND, env=env, capture_output=True, text=True)  # noqa: E731
+    assert run("upgrade", "4429862e877f").returncode == 0
+    c = sqlite3.connect(db)
+    c.executescript("""
+        insert into organizations values ('O1', 'org');
+        insert into users values ('U1', 'O1', 'a@b.c', 'A', 'employee', 'x', 1, '2026-01-01');
+        insert into trainings values ('T1', 'O1', 't', 'retail', 'tr', 'easy', 's', 3, 4, '{}', '[]', '{}',
+                                      'a', 'b', 'c', 1, '2026-01-01');
+        insert into practice_sessions values ('S1', 'O1', 'T1', 'U1', null, 'r1', 'active', 'customer@1',
+                                              '2026-01-01', null);
+        insert into turns values ('N1', 'S1', 0, 'customer', 'ready', 'merhaba', null, null, null, '2026-01-01');
+    """)
+    c.commit()
+    c.close()
+    up = run("upgrade", "head")
+    assert up.returncode == 0, up.stderr[-800:]
+    c = sqlite3.connect(db)
+    assert c.execute("select count(*) from turns where session_id='S1'").fetchone()[0] == 1
+    assert c.execute("select practice_mode from practice_sessions where id='S1'").fetchone() == (None,)
+    assert not c.execute("select name from sqlite_master where name like '_alembic%'").fetchall()

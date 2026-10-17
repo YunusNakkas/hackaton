@@ -42,6 +42,7 @@ testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 120
+extend-exclude = ["alembic/versions"]  # Alembic üretir
 target-version = "py311"
 
 [tool.ruff.lint]
@@ -50,3 +51,7 @@ ignore = ["B008"]  # FastAPI Depends/File/Form varsayılan argümanda kullanıl�
 
 [tool.ruff.lint.per-file-ignores]
 "app/services/prompts.py" = ["E501"]  # prompt içindeki JSON örnekleri tek satır kalmalı
+"../eval/draft_bench.py" = ["E501"]  # ölçüm formlarındaki uzun Türkçe politika metinleri
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "tests"]  # eval/ betikleri de app'i birinci taraf saysın (çalışma dizininden bağımsız)

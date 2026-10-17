@@ -56,7 +56,8 @@
       },
       "employee_turn_count": 1,
       "started_at": "2026-10-17T20:43:38.806242Z",
-      "finished_at": "2026-10-17T20:43:38.851462Z"
+      "finished_at": "2026-10-17T20:43:38.851462Z",
+      "practice_mode": null
     }
   ]
 }

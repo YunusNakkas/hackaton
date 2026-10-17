@@ -340,3 +340,118 @@ def test_asr_echoing_hint_list_is_no_speech(elif_client):
     assert_contract("Job", job)
     assert job["status"] == "error" and job["error"]["code"] == "no_speech" and not job["error"]["retryable"]
     assert _upload(elif_client, session["id"]).status_code == 202  # kullanıcı yeniden kaydedebilir
+
+
+@pytest.mark.parametrize("raw,clean", [
+    ('Hemen" sizin için ne demek, açıklar mısınız?', "Hemen sizin için ne demek, açıklar mısınız?"),  # gerçek çıktı
+    ('"Hemen" ne demek?', '"Hemen" ne demek?'),
+    ('"Tamam, anladım."', "Tamam, anladım."),
+    ("“Hemen” dediniz ama.", "“Hemen” dediniz ama."),
+    ("Yani “hemen mi?", "Yani hemen mi?"),
+    ("Müşteri: Çok  uzun   sürdü.", "Çok uzun sürdü."),
+])
+def test_clean_reply_quotes_and_spaces(raw, clean):
+    from app.worker.jobs import clean_reply
+
+    assert clean_reply(raw)[0] == clean
+
+
+def test_text_turn_never_shows_transcribing(elif_client):
+    from app.db import get_sessionmaker
+    from app.worker.jobs import claim_next
+
+    sid = _start(elif_client)["session"]["id"]
+    res = elif_client.post(f"/api/v1/sessions/{sid}/messages", headers=CSRF,
+                           json={"text": "Merhaba, yardımcı olayım.", "client_request_id": str(uuid.uuid4())})
+    with get_sessionmaker()() as db:
+        assert claim_next(db).status == "generating"
+    assert elif_client.get(f"/api/v1/jobs/{res.json()['job_id']}").json()["status"] == "generating"
+
+
+def test_voice_turn_starts_with_transcribing(elif_client):
+    from app.db import get_sessionmaker
+    from app.worker.jobs import claim_next
+
+    _upload(elif_client, _start(elif_client)["session"]["id"])
+    with get_sessionmaker()() as db:
+        assert claim_next(db).status == "transcribing"
+
+
+def _finished(client, model=None) -> tuple[str, str]:
+    t = _retail_training(client)
+    sid = client.post("/api/v1/sessions", headers=CSRF, json={
+        "training_id": t["id"], "client_request_id": str(uuid.uuid4())}).json()["session"]["id"]
+    _upload(client, sid)
+    run_once(model=model)
+    client.post(f"/api/v1/sessions/{sid}/finish", headers=CSRF)
+    run_once(model=model)
+    return sid, t["id"]
+
+
+def _practice(client, training_id, of, mode="adaptive", focus=("empathy",)):
+    return client.post("/api/v1/sessions", headers=CSRF, json={
+        "training_id": training_id, "client_request_id": str(uuid.uuid4()),
+        "practice": {"of_session_id": of, "mode": mode, "focus_dimension_ids": list(focus)}})
+
+
+class PromptSpy(StubModelClient):
+    def __init__(self):
+        super().__init__()
+        self.customer_system, self.eval_prompt = [], []
+
+    def chat(self, messages, **kw):
+        if kw["purpose"] == "customer_reply":
+            self.customer_system.append(messages[0]["content"])
+        if kw["purpose"] == "evaluation":
+            self.eval_prompt.append(messages[0]["content"])
+        return super().chat(messages, **kw)
+
+
+@pytest.mark.parametrize("mode", ["same", "adaptive"])
+def test_practice_session_modes(elif_client, mode):
+    of, training_id = _finished(elif_client)
+    res = _practice(elif_client, training_id, of, mode=mode)
+    assert res.status_code == 201, res.text
+    assert_contract("CreateSessionResponse", res.json())
+    s = res.json()["session"]
+    assert s["practice"] == {"of_session_id": of, "mode": mode, "focus_dimensions": [
+        {"id": "empathy", "name": "Empati",
+         "description": "Müşterinin duygusunu ve sorununu fark edip buna uygun karşılık verme."}]}
+
+    spy = PromptSpy()
+    _upload(elif_client, s["id"])
+    run_once(model=spy)
+    adaptive_text = "Bu bir TEKRAR provası"
+    assert (adaptive_text in spy.customer_system[0]) is (mode == "adaptive")
+    if mode == "adaptive":
+        system = spy.customer_system[0]
+        assert "Duygunu her cevapta açıkça söyle" in system
+        # yönerge ruh hâlinin ardından, kurallardan önce gelir (sona konunca etkisi zayıftı)
+        assert system.index("Ruh hâlin") < system.index(adaptive_text) < system.index("Gizli hedefin")
+
+    elif_client.post(f"/api/v1/sessions/{s['id']}/finish", headers=CSRF)
+    run_once(model=spy)
+    assert "Bu bir tekrar provası" in spy.eval_prompt[0] and "Empati" in spy.eval_prompt[0]
+    ev = elif_client.get(f"/api/v1/sessions/{s['id']}/evaluation").json()
+    assert_contract("EvaluationEnvelope", ev)
+    assert ev["report"]["focus_dimension_ids"] == ["empathy"]
+
+
+def test_practice_validation(elif_client, can_client, manager_client):
+    of, training_id = _finished(elif_client)
+    trainings = elif_client.get("/api/v1/trainings").json()["items"]
+    other_training = next(t["id"] for t in trainings if t["id"] != training_id)
+    assert _practice(can_client, training_id, of).status_code == 404  # başkasının oturumu
+    wrong = _practice(elif_client, other_training, of)
+    assert wrong.status_code == 422 and "practice.of_session_id" in wrong.json()["error"]["details"]["fields"]
+    unknown = _practice(elif_client, training_id, of, focus=("uydurma",))
+    assert unknown.status_code == 422
+    unfinished = _start(elif_client)["session"]["id"]
+    res = _practice(elif_client, training_id, unfinished)
+    assert res.status_code == 409 and res.json()["error"]["code"] == "evaluation_not_ready"
+
+    sid = _practice(elif_client, training_id, of, mode="same").json()["session"]["id"]
+    summary = next(s for s in manager_client.get("/api/v1/admin/sessions").json()["items"] if s["id"] == sid)
+    assert summary["practice_mode"] == "same"
+    normal = next(s for s in manager_client.get("/api/v1/admin/sessions").json()["items"] if s["id"] == of)
+    assert normal["practice_mode"] is None

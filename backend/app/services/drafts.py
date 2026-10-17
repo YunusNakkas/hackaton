@@ -140,5 +140,99 @@ def training_rows(content: dict[str, Any], *, draft_id: str, version: int, secto
 
 def slugify(text: str, fallback: str) -> str:
     table = str.maketrans("çğıöşüÇĞİÖŞÜ", "cgiosuCGIOSU")
-    s = re.sub(r"[^a-z0-9]+", "_", text.translate(table).lower()).strip("_")[:40]
+    s = re.sub(r"[^a-z0-9]+", "_", text.translate(table).lower()).strip("_")[:40].strip("_")
     return s if re.match(r"^[a-z][a-z0-9_]{1,47}$", s or "") else fallback
+
+
+# ---------------------------------------------------------------- model çıktısını onarma
+# Ölçüm (eval/draft_bench.py, 10 taslak): geçersizlerin hepsi biçim hatasıydı, içerik değil:
+# Türkçe karakterli anahtar ("reçete_sorunu"), sözlük olarak seviyeler ({"0": ...}), metne sızan
+# "Politika_1". Bunları modelden tekrar istemek yerine burada düzeltiyoruz.
+
+_POLICY_REF = re.compile(r"\[?\b(?:policy|politika)[\s_-]?(\d+)\b\]?", re.I)
+
+
+def _unique(slug: str, used: set[str]) -> str:
+    out, n = slug, 2
+    while out in used:
+        out = f"{slug[:44]}_{n}"
+        n += 1
+    used.add(out)
+    return out
+
+
+# Kimlikten sonra gelen Türkçe hal eki → "politika" kelimesinin doğru çekimi.
+_CASES = [  # (ekin başı, bilinen politika için, bilinmeyen için) — uzun ekler önce
+    (("ndeki", "ndaki", "deki", "daki", "teki", "taki"), "politikasındaki", "ilgili politikadaki"),
+    (("nden", "ndan", "den", "dan", "ten", "tan"), "politikasından", "ilgili politikadan"),
+    (("nde", "nda", "de", "da", "te", "ta"), "politikasında", "ilgili politikada"),
+    (("nin", "nın", "nun", "nün", "in", "ın", "un", "ün"), "politikasının", "ilgili politikanın"),
+    (("yle", "yla", "le", "la"), "politikasıyla", "ilgili politikayla"),
+    (("ye", "ya", "e", "a"), "politikasına", "ilgili politikaya"),
+    (("yi", "yı", "yu", "yü", "i", "ı", "u", "ü"), "politikasını", "ilgili politikayı"),
+]
+_REF_IN_TEXT = re.compile(
+    r"(?:\bpolitika\s+)?\[?\b(?:policy|politika)[\s_-]?(\d+)\b\]?(?:['’]([a-zçğıöşü]+))?", re.I)
+
+
+def _replace_policy_refs(text: str, policies: list[dict[str, Any]]) -> str:
+    titles = {p["id"]: p["title"] for p in policies}
+
+    def sub(m: re.Match) -> str:
+        title = titles.get(f"policy_{m.group(1)}")
+        suffix = (m.group(2) or "").lower()
+        for starts, known_form, unknown_form in _CASES:
+            if suffix and suffix.startswith(starts):
+                return f"'{title}' {known_form}" if title else unknown_form
+        return f"'{title}' politikası" if title else "ilgili politika"
+
+    return " ".join(_REF_IN_TEXT.sub(sub, text).split())
+
+
+def repair_generated(raw: dict[str, Any], policies: list[dict[str, Any]],
+                     requested: int) -> tuple[dict[str, Any], list[str]]:
+    """Doğrulamadan önce biçim hatalarını düzeltir. (düzeltilmiş veri, yöneticiye uyarılar) döner."""
+    warnings: list[str] = []
+    scenarios = raw.get("scenarios") if isinstance(raw.get("scenarios"), list) else []
+    if len(scenarios) > requested:
+        warnings.append(f"{requested} senaryo istendi, model {len(scenarios)} üretti; fazlası çıkarıldı.")
+        scenarios = scenarios[:requested]
+    elif 0 < len(scenarios) < requested:
+        warnings.append(f"{requested} senaryo istendi, model yalnızca {len(scenarios)} üretti.")
+
+    known = {p["id"] for p in policies}
+    used_keys: set[str] = set()
+    for i, s in enumerate(scenarios):
+        if not isinstance(s, dict):
+            continue
+        s["key"] = _unique(slugify(str(s.get("key") or s.get("title") or ""), f"senaryo_{i + 1}"), used_keys)
+        for field in ("title", "summary", "opening_line"):
+            if isinstance(s.get(field), str):
+                s[field] = _replace_policy_refs(s[field], policies)
+        if isinstance(s.get("customer"), dict):
+            for field in ("context", "mood", "hidden_goal"):
+                if isinstance(s["customer"].get(field), str):
+                    s["customer"][field] = _replace_policy_refs(s["customer"][field], policies)
+        if isinstance(s.get("success_criteria"), list):
+            s["success_criteria"] = [_replace_policy_refs(x, policies)
+                                     for x in s["success_criteria"] if isinstance(x, str)]
+        if isinstance(s.get("visible_policy_ids"), list):  # "Politika_1", "policy 1" → policy_1
+            ids = []
+            for v in s["visible_policy_ids"]:
+                m = _POLICY_REF.fullmatch(str(v).strip())
+                ids.append(f"policy_{m.group(1)}" if m else str(v))
+            s["visible_policy_ids"] = [v for v in dict.fromkeys(ids) if v in known]
+
+    rubric = raw.get("rubric") if isinstance(raw.get("rubric"), dict) else {}
+    used_ids: set[str] = set()
+    for i, d in enumerate(rubric.get("dimensions") or []):
+        if not isinstance(d, dict):
+            continue
+        d["id"] = _unique(slugify(str(d.get("id") or d.get("name") or ""), f"boyut_{i + 1}"), used_ids)
+        levels = d.get("levels")
+        if isinstance(levels, dict):  # {"0": "...", "1": "..."} → sıralı liste
+            try:
+                d["levels"] = [str(v) for _, v in sorted(levels.items(), key=lambda kv: int(str(kv[0]).strip()[:1]))]
+            except ValueError:
+                d["levels"] = [str(v) for v in levels.values()]
+    return {**raw, "scenarios": scenarios, "rubric": rubric}, warnings

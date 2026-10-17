@@ -17,12 +17,13 @@ os.environ.update(PM_ENV="test", PM_DATABASE_URL=f"sqlite:///{TMP / 'd.sqlite3'}
                   PM_MODEL_MODE="real", PM_TTS_PROVIDER="none")
 sys.path.insert(0, str(ROOT / "backend"))
 
+from fastapi.testclient import TestClient  # noqa: E402
+
 import app.models  # noqa: E402,F401
 from app.db import Base, get_engine, get_sessionmaker  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app.seed import seed  # noqa: E402
 from app.worker.jobs import run_once  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
 
 CSRF = {"X-Requested-With": "provamusteri"}
 FORM = {
