@@ -42,6 +42,8 @@ export function SessionPage() {
     queryKey: ["session", sessionId],
     queryFn: () => api<Session>(`/sessions/${sessionId}`),
     refetchInterval: query => query.state.data?.status === "active" ? 3000 : 15000,
+    // Arama sürerken pencere arka plana düşse de müşteri cevabı gelsin (varsayılan: gizli sekmede durur).
+    refetchIntervalInBackground: true,
   });
   const session = sessionQuery.data;
   const liveJobId = session?.status === "active" ? session.pending_job_id : null;
@@ -55,6 +57,7 @@ export function SessionPage() {
       if (!job || job.status === "ready" || job.status === "error") return false;
       return job.poll_after_ms;
     },
+    refetchIntervalInBackground: true,
   });
 
   const evaluation = useQuery({
@@ -366,7 +369,8 @@ export function SessionPage() {
           turns={session.turns}
           sessionId={session.id}
           waiting={jobBusy || sending}
-          canTalk={canSend && job?.status !== "error" && !shouldEnd}
+          // Son tur hata verdiyse (ör. no_speech) de yeniden konuşulabilir; yoksa telefon ekranı kilitleniyordu.
+          canTalk={canSend && !shouldEnd}
           notice={callNote}
           onUpload={sendAudio}
           onHangup={() => void finish()}
