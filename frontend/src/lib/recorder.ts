@@ -42,12 +42,69 @@ export async function listMics(): Promise<MicInput[]> {
     }));
 }
 
+// ---------------------------------------------------------------- ses analizcisi (sessizlik algılama)
+// Safari, kullanıcı dokunuşu olmadan oluşturulan AudioContext'i askıda bırakır; telefon kanalında dinleme
+// müşteri konuştuktan sonra kendiliğinden başladığı için seviye hep 0 okunuyor ve sessizlik/konuşma
+// algılanamıyordu. Tek bir bağlamı ilk dokunuşta açıp sonra yeniden kullanıyoruz.
+type AudioCtxCtor = typeof AudioContext;
+let sharedContext: AudioContext | null = null;
+
+function audioContextCtor(): AudioCtxCtor | undefined {
+  if (typeof window === "undefined") return undefined;
+  return window.AudioContext || (window as unknown as { webkitAudioContext?: AudioCtxCtor }).webkitAudioContext;
+}
+
+/** Bir kullanıcı dokunuşu içinde çağrılmalı (Safari). Sonraki kayıtlar bu bağlamı kullanır. */
+export function unlockAudio() {
+  const Ctor = audioContextCtor();
+  if (!Ctor) return;
+  sharedContext ??= new Ctor();
+  if (sharedContext.state === "suspended") void sharedContext.resume();
+}
+
+if (typeof window !== "undefined") {
+  for (const type of ["pointerdown", "keydown", "touchend"] as const) {
+    window.addEventListener(type, unlockAudio, { capture: true, passive: true });
+  }
+}
+
+/** Sessizlik eşiği ortam gürültüsüne göre: sabit 0,015 eşiği gürültülü odada hiç "sustu" demeyebilir. */
+export function createSpeechDetector(silenceMs: number) {
+  let floor: number | null = null;
+  let heard = false;
+  let silentSince: number | null = null;
+  return {
+    /** Her ~100 ms'de çağrılır. "stop" dönerse konuşma bitti. */
+    push(rms: number, now: number): "speech" | "silence" | "stop" {
+      // Gürültü tabanı: hızla aşağı, yavaşça yukarı izlenir (konuşma tabanı fazla yükseltmesin).
+      floor = floor === null ? rms : rms < floor ? rms : floor + (rms - floor) * 0.01;
+      const speechAt = Math.max(0.015, floor * 2);
+      const silenceAt = Math.max(0.01, floor * 1.5);
+      if (rms >= speechAt) {
+        heard = true;
+        silentSince = null;
+        return "speech";
+      }
+      if (heard && rms < silenceAt) {
+        silentSince ??= now;
+        if (now - silentSince >= silenceMs) return "stop";
+      }
+      return "silence";
+    },
+    get heardSpeech() {
+      return heard;
+    },
+  };
+}
+
 export interface Recording {
   blob: Blob;
   durationMs: number;
   heardSpeech: boolean;
   deviceLabel: string;
   bluetooth: boolean;
+  /** Ses analizcisi çalışmadı (ör. askıda AudioContext); konuşma var/yok bilinmiyor, kayıt yine gönderilir. */
+  vadUnavailable: boolean;
 }
 
 export function recordUntilSilence(
@@ -57,6 +114,8 @@ export function recordUntilSilence(
     deviceId?: string;
     onLevel?: (level: number) => void;
     onDevice?: (device: { label: string; bluetooth: boolean }) => void;
+    /** Otomatik sessizlik algılama çalışmıyor; kullanıcı kaydı elle bitirmeli. */
+    onVadUnavailable?: () => void;
   } = {},
 ): { stop: () => void; cancel: () => void; done: Promise<Recording | null> } {
   const maxMs = options.maxMs ?? 30_000;
@@ -69,16 +128,18 @@ export function recordUntilSilence(
       done: Promise.reject(new Error("Bu tarayıcı ses kaydını desteklemiyor. Safari 14.3 veya daha yenisi gerekir.")),
     };
   }
-  const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  const audioContext = AudioCtx ? new AudioCtx() : null;
+  // Dokunuşla açılmış ortak bağlam varsa onu kullan; yoksa geçici bir bağlam aç (kayıt bitince kapanır).
+  const Ctor = audioContextCtor();
+  const ownContext = !sharedContext && Ctor ? new Ctor() : null;
+  const audioContext = sharedContext ?? ownContext;
   void audioContext?.resume();
+  const detector = createSpeechDetector(silenceMs);
+  let vadUnavailable = !audioContext;
   let recorder: MediaRecorder | null = null;
   let mode: "run" | "stop" | "cancel" = "run";
   let timer = 0;
   const chunks: Blob[] = [];
   let started = 0;
-  let heardSpeech = false;
-  let silentSince: number | null = null;
 
   const done = navigator.mediaDevices
     .getUserMedia({ audio: options.deviceId ? { deviceId: { exact: options.deviceId } } : true })
@@ -92,12 +153,14 @@ export function recordUntilSilence(
 
           const media = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
           recorder = media;
+          let source: MediaStreamAudioSourceNode | null = null;
           media.ondataavailable = (event) => {
             if (event.data.size) chunks.push(event.data);
           };
           const finish = () => {
             window.clearInterval(timer);
-            void audioContext?.close();
+            source?.disconnect();
+            void ownContext?.close();
             stream.getTracks().forEach((item) => item.stop());
             if (mode === "cancel") {
               resolve(null);
@@ -107,26 +170,41 @@ export function recordUntilSilence(
             resolve({
               blob: new Blob(chunks, { type }),
               durationMs: Date.now() - started,
-              heardSpeech,
+              // Analizci çalışmadıysa konuşma olup olmadığını bilemeyiz: kaydı at(ma), sunucu sessizliği ayıklar.
+              heardSpeech: detector.heardSpeech || vadUnavailable,
               deviceLabel: label,
               bluetooth,
+              vadUnavailable,
             });
           };
           media.onerror = () => {
             window.clearInterval(timer);
-            void audioContext?.close();
+            source?.disconnect();
+            void ownContext?.close();
             stream.getTracks().forEach((item) => item.stop());
             reject(new Error("Kayıt alınamadı."));
           };
           media.onstop = finish;
 
           if (audioContext) {
-            const source = audioContext.createMediaStreamSource(stream);
+            source = audioContext.createMediaStreamSource(stream);
             const analyser = audioContext.createAnalyser();
             analyser.fftSize = 2048;
             source.connect(analyser);
             const data = new Uint8Array(analyser.fftSize);
+            let flatTicks = 0;
             timer = window.setInterval(() => {
+              const now = Date.now();
+              if (now - started >= maxMs) media.stop();
+              // Askıdaki bağlam düz (128) veri döndürür: 1,5 sn boyunca hiç dalga yoksa analizci çalışmıyor.
+              if (audioContext.state !== "running") {
+                flatTicks += 1;
+                if (flatTicks === 15 && !vadUnavailable) {
+                  vadUnavailable = true;
+                  options.onVadUnavailable?.();
+                }
+                return;
+              }
               analyser.getByteTimeDomainData(data);
               let sum = 0;
               for (let index = 0; index < data.length; index += 1) {
@@ -135,16 +213,10 @@ export function recordUntilSilence(
               }
               const rms = Math.sqrt(sum / data.length);
               options.onLevel?.(Math.min(1, rms / 0.08));
-              if (rms >= 0.015) {
-                heardSpeech = true;
-                silentSince = null;
-              } else if (heardSpeech) {
-                silentSince ??= Date.now();
-                if (Date.now() - silentSince >= silenceMs) media.stop();
-              }
-              if (Date.now() - started >= maxMs) media.stop();
+              if (detector.push(rms, now) === "stop") media.stop();
             }, 100);
           } else {
+            options.onVadUnavailable?.();
             timer = window.setInterval(() => {
               if (Date.now() - started >= maxMs) media.stop();
             }, 200);
@@ -157,7 +229,7 @@ export function recordUntilSilence(
         }),
     )
     .catch((error: unknown) => {
-      void audioContext?.close();
+      void ownContext?.close();
       throw error;
     });
 

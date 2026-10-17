@@ -26,6 +26,10 @@ export function VoiceComposer({
   const heard = useRef(false);
   const busy = useRef(false);
   const live = useRef(true);
+  // Telefon kanalında ses duyulmayınca dinleme kendini yeniden başlatıyordu; üst üste iki kez olursa dur.
+  const emptyRounds = useRef(0);
+  const [paused, setPaused] = useState(false);
+  const [manualOnly, setManualOnly] = useState(false);
 
   useEffect(() => {
     live.current = true;
@@ -67,6 +71,7 @@ export function VoiceComposer({
     busy.current = true;
     setError(null);
     setQuiet(false);
+    setPaused(false);
     heard.current = false;
     setRecording(true);
     const session = recordUntilSilence({
@@ -80,6 +85,7 @@ export function VoiceComposer({
         setDeviceLabel(device.label);
         setBluetooth(device.bluetooth);
       },
+      onVadUnavailable: () => setManualOnly(true),
     });
     handle.current = session;
     let retry = false;
@@ -87,12 +93,17 @@ export function VoiceComposer({
       const result = await session.done;
       await refreshMics();
       if (result && !result.heardSpeech) {
-        retry = handsFree && live.current;
+        emptyRounds.current += 1;
+        retry = handsFree && live.current && emptyRounds.current < 2;
         if (!handsFree) {
           setError("Ses algılanmadı. Kayıt gönderilmedi.");
           setQuiet(true);
+        } else if (!retry) {
+          setPaused(true);
+          setError("Sesini duyamadım. Mikrofonu kontrol edip “Tekrar dinle”ye bas.");
         }
       } else if (result) {
+        emptyRounds.current = 0;
         const filename = `cevap.${extensionFor(result.blob.type)}`;
         await upload({
           blob: result.blob,
@@ -117,6 +128,7 @@ export function VoiceComposer({
 
   useEffect(() => {
     if (!handsFree || disabled) return;
+    emptyRounds.current = 0;
     void begin.current();
     return () => {
       handle.current?.cancel();
@@ -154,6 +166,32 @@ export function VoiceComposer({
         {recording && !call && (
           <button type="button" className="text-sm text-muted underline" onClick={() => handle.current?.cancel()}>
             Vazgeç
+          </button>
+        )}
+        {call && recording && (
+          // Otomatik sessizlik algılaması her ortamda çalışmayabilir (gürültü, Safari); elle bitirme her zaman var.
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              handle.current?.stop();
+            }}
+            className="rounded-full bg-white px-5 py-2 text-sm font-semibold text-ink"
+          >
+            Bitti, gönder
+          </button>
+        )}
+        {call && paused && !recording && !disabled && (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              emptyRounds.current = 0;
+              void start();
+            }}
+            className="rounded-full bg-white/15 px-5 py-2 text-sm font-semibold text-white"
+          >
+            Tekrar dinle
           </button>
         )}
         <div className={`flex items-center gap-2 ${call ? "w-40" : "min-w-36 flex-1"}`} aria-label="Mikrofon seviyesi">
@@ -204,7 +242,12 @@ export function VoiceComposer({
           )}
         </p>
       )}
-      {recording && quiet && <p className="mt-2 text-sm text-warn">Ses gelmiyor. Mikrofona yaklaş ya da dahili mikrofonu seç.</p>}
+      {recording && manualOnly && (
+        <p className="mt-2 text-sm text-warn">Otomatik algılama bu tarayıcıda çalışmıyor. Konuşman bitince “Bitti, gönder”e bas.</p>
+      )}
+      {recording && quiet && !manualOnly && (
+        <p className="mt-2 text-sm text-warn">Ses gelmiyor. Mikrofona yaklaş ya da dahili mikrofonu seç.</p>
+      )}
       {error && <p className="mt-2 text-sm text-accent">{error}</p>}
       {failed && error && (
         <button type="button" className="mt-2 text-sm underline" onClick={() => void upload(failed)}>
