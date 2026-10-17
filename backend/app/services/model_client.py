@@ -18,6 +18,11 @@ class ModelUnavailable(Exception):
     pass
 
 
+class ModelRejected(Exception):
+    """Model servisi isteği geçersiz buldu (422), ör. ses desteklemeyen runtime'a ses gönderildi.
+    Tekrar denemek sonucu değiştirmez."""
+
+
 class ModelClient(Protocol):
     model_name: str
     runtime: str
@@ -38,6 +43,8 @@ class HttpModelClient:
     def _generate(self, body: dict[str, Any]) -> str:
         try:
             res = self._http.post("/v1/generate", json=body)
+            if res.status_code == 422:
+                raise ModelRejected(res.text[:300])
             res.raise_for_status()
         except httpx.HTTPError as exc:
             raise ModelUnavailable(str(exc)) from exc

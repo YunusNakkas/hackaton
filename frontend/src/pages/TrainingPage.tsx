@@ -2,7 +2,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, isApiError } from "../api/client";
-import type { CreateSessionResponse, Me, TrainingDetail } from "../api/types";
+import type { CreateSessionResponse, Health, Me, TrainingDetail } from "../api/types";
 import { AssignModal } from "../components/AssignModal";
 import { difficultyLabel, sectorLabel } from "../lib/labels";
 
@@ -14,6 +14,7 @@ export function TrainingPage() {
   const [assignOpen, setAssignOpen] = useState(false);
 
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<Me>("/me") });
+  const health = useQuery({ queryKey: ["health"], queryFn: () => api<Health>("/health") });
   const isManager = me.data?.user.role === "manager";
 
   const training = useQuery({
@@ -128,7 +129,7 @@ export function TrainingPage() {
           {start.isPending ? "Oturum Hazırlanıyor…" : "Provayı Başlat"}
         </button>
         <p className="mt-2.5 text-xs text-muted">
-          Müşteri yazarak başlar. Sen de yazarak cevap verirsin.
+          {health.data?.audio_input ? "Müşteri konuşarak başlar. Sen konuşarak ya da yazarak cevap verirsin." : "Müşteri yazarak başlar. Sen de yazarak cevap verirsin."}
         </p>
       </div>
 

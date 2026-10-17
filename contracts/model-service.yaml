@@ -20,8 +20,11 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [status, model, runtime, device]
+                required: [status, model, runtime, device, audio_input]
                 properties:
+                  audio_input:
+                    type: boolean
+                    description: Runtime ses girişini (ASR) destekliyor mu. Ollama metin kurulumunda false; ses gelirse 422.
                   status: { type: string, const: ok }
                   model: { type: string, examples: ["google/gemma-4-E2B-it"] }
                   runtime: { type: string, examples: [transformers] }

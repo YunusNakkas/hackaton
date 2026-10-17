@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import Literal
 
 import httpx
-
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
@@ -93,7 +92,8 @@ def health():
             adapter.check_health()
         except httpx.HTTPError as exc:
             raise HTTPException(503, "Ollama servisine ulaşılamıyor") from exc
-    return {"status": "ok", "model": adapter.model_id, "runtime": adapter.runtime, "device": adapter.device}
+    return {"status": "ok", "model": adapter.model_id, "runtime": adapter.runtime, "device": adapter.device,
+            "audio_input": bool(getattr(adapter, "supports_audio", False))}
 
 
 @app.post("/v1/generate")
@@ -126,7 +126,8 @@ def generate(req: GenerateRequest):
         with slot.acquire(req.priority):
             queue_s = time.perf_counter() - waited
             try:
-                out = adapter.generate(messages, req.max_new_tokens, req.sampling.model_dump() if req.sampling else None)
+                sampling = req.sampling.model_dump() if req.sampling else None
+                out = adapter.generate(messages, req.max_new_tokens, sampling)
             except (httpx.HTTPError, RuntimeError) as exc:
                 log.exception("Model üretimi başarısız")
                 raise HTTPException(503, "Yerel model üretimi tamamlanamadı.") from exc

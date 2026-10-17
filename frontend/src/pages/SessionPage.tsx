@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, isApiError } from "../api/client";
-import type { EvaluationEnvelope, Job, Me, Session, TurnAccepted } from "../api/types";
+import type { EvaluationEnvelope, Health, Job, Me, Session, TurnAccepted } from "../api/types";
 import { Clip } from "../components/Clip";
 import { ReportView } from "../components/ReportView";
 import { ReviewModal } from "../components/ReviewModal";
@@ -26,7 +26,10 @@ export function SessionPage() {
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const stopRecording = useRef<(() => void) | null>(null);
-  const canRecord = typeof MediaRecorder !== "undefined" && Boolean(navigator.mediaDevices?.getUserMedia);
+  const health = useQuery({ queryKey: ["health"], queryFn: () => api<Health>("/health") });
+  const browserCanRecord = typeof MediaRecorder !== "undefined" && Boolean(navigator.mediaDevices?.getUserMedia);
+  // Ses desteklemeyen kurulumda (ör. Ollama) mikrofon düğmesi hiç gösterilmez.
+  const canRecord = browserCanRecord && health.data?.audio_input === true;
 
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<Me>("/me") });
 

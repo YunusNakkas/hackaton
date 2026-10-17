@@ -20,6 +20,7 @@ log = logging.getLogger("model-service.mlx")
 
 class MlxAdapter:
     runtime = "mlx"
+    supports_audio = True
     device = "mps"
 
     def __init__(self, model_id: str):
