@@ -2,7 +2,7 @@
 
 İşletmelerin kendi politika ve ölçütleriyle çalışan sesli müşteri provası ve yönetici inceleme platformu.
 
-> Durum: backend P0 uçlarının tamamı çalışıyor: çalışan akışı (giriş → sesli tur → değerlendirme) ve yönetici paneli (özet, çalışanlar, inceleme, atama, Gemma ile taslak). Frontend geliştiriliyor.
+> Durum: yönetici arayüzü ve çalışan yazılı prova akışı hazır. Gerçek modelle taslak → yayımlama → atama → prova → tur sesleri → gerekçeli puan düzeltme zinciri test edildi. Açık mavi ve lacivert temalar mevcut.
 
 ## Dizinler
 
@@ -21,7 +21,7 @@
 ```
 tarayıcı ──HTTP/cookie──► API (FastAPI) ──SQLite (jobs tablosu)──► worker ──HTTP──► model-service (Gemma)
                                  ▲                                    │
-                                 └──────── ses dosyaları (var/media) ◄┘── TTS (macOS say / Yelda)
+                                 └──────── ses dosyaları (var/media) ◄┘── TTS (Piper / macOS say)
 ```
 
 API uzun model çağrısı yapmaz; işi kuyruğa yazar, `202 + job_id` döner. Worker işler, tarayıcı `GET /jobs/{id}` ile yoklar.
@@ -61,6 +61,17 @@ Gerçek modelle duman testleri (geçici veritabanı kullanır): `backend/.venv/b
 
 Frontend geliştirmesi gerçek modeli beklemez: `PM_MODEL_MODE=stub` ile API gerçek davranır, model cevapları `[stub]` etiketlidir. `/api/v1/health` → `model_service: "stub"`.
 
-## Lisans
+### Windows/Linux Türkçe tur sesleri
+
+`backend/.venv/Scripts/python.exe -m pip install -e "./backend[tts]"` ile isteğe bağlı Piper bağımlılığını kurun.
+[Türkçe ses modelini](https://huggingface.co/rhasspy/piper-voices/tree/main/tr/tr_TR/dfki/medium) indirin: `.onnx` ve `.onnx.json` aynı klasörde olmalı.
+`.env` içinde `PM_TTS_PROVIDER=piper` ve `PM_TTS_MODEL_PATH=<mutlak model dosyası yolu>` ayarlayıp API ve worker'ı yeniden başlatın.
+Yeni yazılı turların hem çalışan hem müşteri metinleri WAV olarak saklanır ve yetkili kullanıcı tarafından dinlenir. Önceden oluşturulmuş sessiz oturumlara geriye dönük ses eklenmez.
+
+Ses modeli [MODEL_CARD](https://huggingface.co/rhasspy/piper-voices/blob/main/tr/tr_TR/dfki/medium/MODEL_CARD) içinde CC BY-NC-SA 4.0 veri kümesi lisansı belirtir; ticari kullanım için uygun lisanslı bir ses modeli seçilmelidir. Piper yazılımı GPL lisanslıdır.
+
+Tam yönetici akışı testi: `backend/.venv/Scripts/python.exe eval/manager_flow_real.py`. Gerçek model servisi ve Piper ses modeli gerekir; test geçici DB/media kullanır. İsteğe bağlı yeni bir çıktı klasörü argümanı test verilerini tarayıcıda incelemek için saklar.
+
+## Proje lisansı
 
 Henüz seçilmedi. Gemma kullanım koşullarıyla uyumlu bir lisans seçilip `LICENSE` eklenecek.
