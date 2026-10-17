@@ -199,6 +199,7 @@ class CreateAssignmentsRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     training_id: str
     employee_ids: list[str] = Field(min_length=1, max_length=200)
+    channel: Literal["message", "phone"] = "message"
     due_at: datetime | None = None
 
 
@@ -216,12 +217,12 @@ def create_assignments(body: CreateAssignmentsRequest, me: User = Depends(requir
         raise not_found("Çalışan")
     already = {a.employee_id for a in db.query(Assignment).filter(
         Assignment.training_id == t.id, Assignment.employee_id.in_(body.employee_ids),
-        Assignment.status.in_(OPEN_ASSIGNMENT))}
+        Assignment.channel == body.channel, Assignment.status.in_(OPEN_ASSIGNMENT))}
     created = []
     for emp_id in body.employee_ids:
         if emp_id not in already:
             a = Assignment(org_id=me.org_id, training_id=t.id, employee_id=emp_id, assigned_by=me.id,
-                           due_at=body.due_at)
+                           channel=body.channel, due_at=body.due_at)
             db.add(a)
             created.append(a)
     db.commit()

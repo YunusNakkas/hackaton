@@ -1,6 +1,7 @@
 export type Role = "employee" | "manager";
 export type Difficulty = "easy" | "medium" | "hard";
 export type AssignmentStatus = "assigned" | "in_progress" | "completed";
+export type PracticeChannel = "message" | "phone";
 export type SessionStatus = "active" | "finished";
 export type Speaker = "employee" | "customer";
 export type TurnStatus = "processing" | "ready" | "error";
@@ -66,6 +67,7 @@ export interface Assignment {
   training: TrainingSummary;
   employee_id: string;
   status: AssignmentStatus;
+  channel: PracticeChannel;
   assigned_at: string;
   due_at: string | null;
   completed_session_id: string | null;
@@ -92,6 +94,7 @@ export interface Session {
   training: TrainingSummary;
   employee: { id: string; display_name: string };
   assignment_id: string | null;
+  channel: PracticeChannel;
   status: SessionStatus;
   evaluation_status: EvaluationStatus | null;
   review_status: ReviewStatus;
@@ -267,6 +270,7 @@ export interface CreateReviewRequest {
 export interface CreateAssignmentsRequest {
   training_id: string;
   employee_ids: string[];
+  channel?: PracticeChannel;
   due_at?: string | null;
 }
 

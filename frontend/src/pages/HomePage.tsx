@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api, allPages } from "../api/client";
-import type { AdminOverview, Assignment, Me, TrainingSummary } from "../api/types";
+import type { AdminOverview, Assignment, Me, SessionSummary, TrainingSummary } from "../api/types";
 import { assignmentLabel, difficultyLabel, formatDue, sectorLabel } from "../lib/labels";
 
 export function HomePage() {
@@ -16,6 +16,11 @@ export function HomePage() {
   const assignments = useQuery({
     queryKey: ["assignments"],
     queryFn: () => allPages<Assignment>("/assignments?limit=100"),
+  });
+
+  const history = useQuery({
+    queryKey: ["my-sessions"],
+    queryFn: () => api<{ items: SessionSummary[] }>("/sessions?limit=20"),
   });
 
   const adminOverview = useQuery({
@@ -37,7 +42,7 @@ export function HomePage() {
           <p className="mt-1.5 max-w-xl text-sm sm:text-base text-muted">
             {isManager
               ? "Yönetici olarak çalışanlarınıza eğitim atayabilir, provaları denetleyebilir veya katalogdaki senaryoları test edebilirsiniz."
-              : "Sana atanan provayı tamamla ya da katalogdan bir senaryo seçerek kendini geliştir. Müşteri yazar, sen yazarak yanıt verirsin."}
+              : "Mesaj görevinde yazarsın. Telefon görevinde müşteri arar, sen konuşursun; sustuğunda söz ona geçer."}
           </p>
         </div>
 
@@ -131,7 +136,7 @@ export function HomePage() {
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 text-xs text-muted">
                     <span className="font-medium text-primary">
-                      {sectorLabel(item.training.sector)}
+                      {sectorLabel(item.training.sector)} · {item.channel === "phone" ? "Telefon" : "Mesaj"}
                     </span>
                     <span>·</span>
                     <span
@@ -166,9 +171,42 @@ export function HomePage() {
                         : "bg-primary text-white shadow-xs group-hover:scale-105"
                     }`}
                   >
-                    {isCompleted ? "Sonuç Raporunu Gör" : "Provaya Başla →"}
+                    {isCompleted ? "Sonuç Raporunu Gör" : item.channel === "phone" ? "Aramayı aç" : "Mesaja gir"}
                   </span>
                 </div>
+              </Link>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted">Geçmiş provalar</h2>
+        {history.isLoading && <p className="text-sm text-muted">Yükleniyor…</p>}
+        {history.data && history.data.items.length === 0 && (
+          <p className="text-sm text-muted">Henüz prova yok.</p>
+        )}
+        <div className="grid gap-3">
+          {history.data?.items.map((item) => {
+            const score =
+              item.total?.complete && item.total.score != null
+                ? `${item.total.score} / ${item.total.max_score}`
+                : item.status === "finished"
+                  ? "Puan yok"
+                  : "Sürüyor";
+            return (
+              <Link
+                key={item.id}
+                to={`/sessions/${item.id}`}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-line bg-card px-5 py-4 hover:border-primary/40"
+              >
+                <div>
+                  <p className="text-xs text-muted">
+                    {sectorLabel(item.training.sector)} · {new Date(item.started_at).toLocaleString("tr-TR")}
+                  </p>
+                  <p className="mt-0.5 text-lg">{item.training.title}</p>
+                </div>
+                <span className="text-sm font-semibold text-primary">{score}</span>
               </Link>
             );
           })}

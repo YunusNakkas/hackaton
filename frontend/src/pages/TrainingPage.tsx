@@ -1,8 +1,8 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { api, isApiError } from "../api/client";
-import type { CreateSessionResponse, Me, TrainingDetail } from "../api/types";
+import { allPages, api, isApiError } from "../api/client";
+import type { Assignment, CreateSessionResponse, Me, PracticeChannel, TrainingDetail } from "../api/types";
 import { AssignModal } from "../components/AssignModal";
 import { difficultyLabel, sectorLabel } from "../lib/labels";
 
@@ -20,13 +20,20 @@ export function TrainingPage() {
     queryKey: ["training", trainingId],
     queryFn: () => api<TrainingDetail>(`/trainings/${trainingId}`),
   });
+  const assignments = useQuery({
+    queryKey: ["assignments"],
+    queryFn: () => allPages<Assignment>("/assignments?limit=100"),
+    enabled: Boolean(assignmentId),
+  });
+  const assignedChannel = assignments.data?.items.find((item) => item.id === assignmentId)?.channel;
 
   const start = useMutation({
-    mutationFn: () =>
+    mutationFn: (channel: PracticeChannel) =>
       api<CreateSessionResponse>("/sessions", {
         method: "POST",
         body: JSON.stringify({
           training_id: trainingId,
+          channel: assignedChannel ?? channel,
           ...(assignmentId ? { assignment_id: assignmentId } : {}),
           client_request_id: crypto.randomUUID(),
         }),
@@ -119,16 +126,30 @@ export function TrainingPage() {
       )}
 
       <div className="pt-2">
-        <button
-          type="button"
-          disabled={start.isPending}
-          onClick={() => start.mutate()}
-          className="rounded-full bg-primary px-8 py-3 text-sm font-semibold text-white shadow-md hover:opacity-95 disabled:opacity-50 transition-all cursor-pointer"
-        >
-          {start.isPending ? "Oturum Hazırlanıyor…" : "Provayı Başlat"}
-        </button>
+        <div className="flex flex-wrap gap-3">
+          {assignedChannel !== "phone" && (
+            <button
+              type="button"
+              disabled={start.isPending}
+              onClick={() => start.mutate("message")}
+              className="rounded-full bg-primary px-8 py-3 text-sm font-semibold text-white shadow-md hover:opacity-95 disabled:opacity-50"
+            >
+              {start.isPending ? "Hazırlanıyor…" : "Mesaj provası"}
+            </button>
+          )}
+          {assignedChannel !== "message" && (
+            <button
+              type="button"
+              disabled={start.isPending}
+              onClick={() => start.mutate("phone")}
+              className="rounded-full border border-ink px-8 py-3 text-sm font-semibold disabled:opacity-50"
+            >
+              Telefon provası
+            </button>
+          )}
+        </div>
         <p className="mt-2.5 text-xs text-muted">
-          Müşteri yazarak başlar. Sen de yazarak cevap verirsin.
+          Mesaj provası yazılıdır. Telefon provası karşılıklı aramadır; sustuğunda söz müşteriye geçer.
         </p>
       </div>
 

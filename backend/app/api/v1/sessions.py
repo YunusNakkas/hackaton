@@ -2,9 +2,10 @@ import uuid
 from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, Depends, File, Form, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -33,6 +34,7 @@ class CreateSessionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     training_id: str
     assignment_id: str | None = None
+    channel: Literal["message", "phone"] = "message"
     client_request_id: uuid.UUID
     practice: PracticeRequest | None = None
 
@@ -86,6 +88,14 @@ def _check_practice(db: Session, user: User, t: Training, p: PracticeRequest) ->
     return p
 
 
+@router.get("/sessions")
+def list_my_sessions(cursor: str | None = None, limit: int = Query(20, ge=1, le=100),
+                     user: User = Depends(current_user), db: Session = Depends(get_db)):
+    stmt = select(PracticeSession).where(PracticeSession.employee_id == user.id)
+    rows, nxt = schemas.paginate(db, stmt, PracticeSession.id, cursor, limit, desc=True)
+    return {"items": [schemas.session_summary(db, row[0]) for row in rows], "next_cursor": nxt}
+
+
 @router.post("/sessions", status_code=201)
 def create_session(body: CreateSessionRequest, response: Response,
                    user: User = Depends(current_user), db: Session = Depends(get_db)):
@@ -112,8 +122,10 @@ def create_session(body: CreateSessionRequest, response: Response,
     practice = _check_practice(db, user, t, body.practice) if body.practice else None
     settings = get_settings()
     adaptive = practice is not None and practice.mode == "adaptive"
+    channel = assignment.channel if assignment else body.channel
     s = PracticeSession(org_id=user.org_id, training_id=t.id, employee_id=user.id,
-                        assignment_id=assignment.id if assignment else None, client_request_id=crid,
+                        assignment_id=assignment.id if assignment else None, channel=channel,
+                        client_request_id=crid,
                         prompt_version=CUSTOMER_VERSION + ("+adaptive" if adaptive else ""),
                         practice_of_session_id=practice.of_session_id if practice else None,
                         practice_mode=practice.mode if practice else None,

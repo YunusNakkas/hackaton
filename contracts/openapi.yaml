@@ -153,6 +153,20 @@ paths:
 
   # ---------------------------------------------------------------- sessions
   /sessions:
+    get:
+      tags: [employee]
+      operationId: listMySessions
+      description: Giriş yapan çalışanın kendi prova oturumları, yeniden eskiye. Başkasının oturumu dönmez.
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Oturum listesi
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SessionSummaryPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
     post:
       tags: [sessions]
       operationId: createSession
@@ -993,14 +1007,19 @@ components:
     AssignmentStatus:
       type: string
       enum: [assigned, in_progress, completed]
+    PracticeChannel:
+      type: string
+      enum: [message, phone]
+      description: "`message` yazılı prova, `phone` karşılıklı telefon simülasyonu."
     Assignment:
       type: object
-      required: [id, training, employee_id, status, assigned_at, due_at, completed_session_id]
+      required: [id, training, employee_id, status, channel, assigned_at, due_at, completed_session_id]
       properties:
         id: { $ref: "#/components/schemas/Id" }
         training: { $ref: "#/components/schemas/TrainingSummary" }
         employee_id: { $ref: "#/components/schemas/Id" }
         status: { $ref: "#/components/schemas/AssignmentStatus" }
+        channel: { $ref: "#/components/schemas/PracticeChannel" }
         assigned_at: { $ref: "#/components/schemas/Timestamp" }
         due_at:
           oneOf:
@@ -1039,6 +1058,9 @@ components:
           oneOf:
             - { $ref: "#/components/schemas/Id" }
             - { type: "null" }
+        channel:
+          $ref: "#/components/schemas/PracticeChannel"
+          description: Atama varsa atamanın kanalı kullanılır.
         client_request_id: { type: string, format: uuid }
         practice:
           description: |
@@ -1122,6 +1144,7 @@ components:
         - training
         - employee
         - assignment_id
+        - channel
         - status
         - evaluation_status
         - review_status
@@ -1151,6 +1174,7 @@ components:
           oneOf:
             - { $ref: "#/components/schemas/Id" }
             - { type: "null" }
+        channel: { $ref: "#/components/schemas/PracticeChannel" }
         status: { $ref: "#/components/schemas/SessionStatus" }
         evaluation_status:
           oneOf:
@@ -1619,6 +1643,8 @@ components:
           maxItems: 200
           uniqueItems: true
           items: { $ref: "#/components/schemas/Id" }
+        channel:
+          $ref: "#/components/schemas/PracticeChannel"
         due_at:
           oneOf:
             - { $ref: "#/components/schemas/Timestamp" }

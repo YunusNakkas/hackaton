@@ -51,6 +51,29 @@ def test_pagination_cursor(elif_client):
     assert not {t["id"] for t in first["items"]} & {t["id"] for t in second["items"]}
 
 
+def test_phone_assignment_opens_a_call(manager_client, elif_client):
+    training = _retail_training(elif_client)
+    elif_id = elif_client.get("/api/v1/me").json()["user"]["id"]
+    assigned = manager_client.post("/api/v1/admin/assignments", headers=CSRF, json={
+        "training_id": training["id"], "employee_ids": [elif_id], "channel": "phone"})
+    assert assigned.status_code == 201, assigned.text
+    created_assignment = assigned.json()["created"][0]
+    assert created_assignment["channel"] == "phone"
+    opened = elif_client.post("/api/v1/sessions", headers=CSRF, json={
+        "training_id": training["id"], "assignment_id": created_assignment["id"],
+        "channel": "message", "client_request_id": str(uuid.uuid4())})
+    assert opened.status_code == 201, opened.text
+    assert opened.json()["session"]["channel"] == "phone"
+
+
+def test_employee_lists_only_own_sessions(elif_client, can_client):
+    created = _start(elif_client)
+    page = elif_client.get("/api/v1/sessions").json()
+    assert_contract("SessionSummaryPage", page)
+    assert created["session"]["id"] in {item["id"] for item in page["items"]}
+    assert can_client.get("/api/v1/sessions").json()["items"] == []
+
+
 def test_text_message_skips_asr_and_gets_a_reply(elif_client):
     created = _start(elif_client)
     session_id = created["session"]["id"]
