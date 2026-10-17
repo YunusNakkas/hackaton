@@ -171,6 +171,8 @@ export interface paths {
          *     - Aynı anda oturum başına yalnızca bir işlenen tur olabilir (aksi 409 `turn_in_progress`).
          *     - Aynı `client_request_id` tekrar gönderilirse aynı `job_id` döner (ses tekrar işlenmez).
          *     - Limitler: en fazla 10 MB ve 30 sn (Gemma 4 ses girişi sınırı); en az 0,5 sn. İstemci 30 sn'de kaydı otomatik durdurmalı.
+         *     - Kayıtta en az 0,3 sn konuşma algılanmazsa 422 `no_speech` döner (sessiz kayıtta ASR metin uyduruyor).
+         *       ASR sonucu anlaşılamazsa iş `error.code = no_speech`, `retryable = false` ile biter; kullanıcı yeniden kaydeder.
          */
         post: operations["submitTurn"];
         delete?: never;
@@ -491,7 +493,7 @@ export interface components {
             };
         };
         /** @enum {string} */
-        ErrorCode: "unauthorized" | "invalid_credentials" | "forbidden" | "csrf_header_missing" | "not_found" | "conflict" | "turn_in_progress" | "session_not_active" | "evaluation_not_ready" | "version_mismatch" | "email_taken" | "job_not_retryable" | "payload_too_large" | "unsupported_media_type" | "audio_too_short" | "audio_too_long" | "audio_undecodable" | "validation_error" | "rate_limited" | "model_unavailable" | "internal_error";
+        ErrorCode: "unauthorized" | "invalid_credentials" | "forbidden" | "csrf_header_missing" | "not_found" | "conflict" | "turn_in_progress" | "session_not_active" | "evaluation_not_ready" | "version_mismatch" | "email_taken" | "job_not_retryable" | "payload_too_large" | "unsupported_media_type" | "audio_too_short" | "audio_too_long" | "audio_undecodable" | "no_speech" | "validation_error" | "rate_limited" | "model_unavailable" | "internal_error";
         Health: {
             /** @enum {string} */
             status: "ok" | "degraded";
