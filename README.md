@@ -11,7 +11,7 @@
 | `contracts/` | backend (ortak inceleme) | Web API (`openapi.yaml`), model servisi sözleşmesi, fixture'lar |
 | `frontend/` | frontend | React + TS + Vite |
 | `backend/` | backend | FastAPI API + worker (SQLite, Alembic) |
-| `model-service/` | backend | Gemma'yı bir kez yükleyen servis (Transformers; MPS/CUDA/CPU) |
+| `model-service/` | backend | Gemma'yı bir kez yükleyen servis (MLX 4-bit Mac'te, Transformers NVIDIA'da) |
 | `data/` | ortak | Senaryo, politika, rubrik (mağaza + otel, 6 senaryo) |
 | `eval/` | backend | S0 ölçümleri, gerçek modelle uçtan uca test |
 | `docs/` | ortak | `s0-spike.md` ölçüm sonuçları |
@@ -45,15 +45,15 @@ Demo kullanıcıları (şifre `.env` içindeki `PM_DEMO_PASSWORD`, boşsa `prova
 
 ### Gerçek model
 
-`.env` içinde `PM_MODEL_MODE=real` yapın ve model servisini başlatın (ilk açılış ~20 sn):
+`.env` içinde `PM_MODEL_MODE=real` yapın ve model servisini başlatın (ilk açılış modeli indirir, ~5 GB; sonrakiler ~10 sn):
 
 ```bash
 cd model-service
-python3.12 -m venv .venv && .venv/bin/pip install -e .
-PYTORCH_ENABLE_MPS_FALLBACK=1 .venv/bin/uvicorn app.main:app --port 8100   # terminal 3
+python3.12 -m venv .venv-mlx && .venv-mlx/bin/pip install -e ".[mlx]"
+.venv-mlx/bin/uvicorn app.main:app --port 8100 --env-file ../.env   # terminal 3
 ```
 
-Gemma 4 E2B bf16 ~10 GB bellek kullanır; 16 GB Mac'te sınırda. Ayrıntılar: `docs/s0-spike.md`.
+Mac'te Gemma 4 E4B 4-bit (MLX, ~5,4 GB) kullanılır; NVIDIA için `model-service/README.md`. Ölçümler: `docs/s0-spike.md`.
 
 Uçtan uca duman testi (geçici veritabanı kullanır): `backend/.venv/bin/python eval/e2e_real.py`
 

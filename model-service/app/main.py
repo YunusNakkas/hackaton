@@ -19,14 +19,14 @@ from typing import Literal
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-from app.adapters.transformers_adapter import TransformersAdapter
 from app.priority_lock import PriorityLock
 
 log = logging.getLogger("model-service")
+RUNTIME = os.environ.get("PM_RUNTIME", "transformers")  # transformers | mlx
 MODEL_ID = os.environ.get("PM_MODEL_ID", "google/gemma-4-E2B-it")
 MAX_AUDIO_B64 = 4 * 1024 * 1024  # ~30 sn 16 kHz WAV ≈ 1 MB
 
-adapter: TransformersAdapter | None = None
+adapter = None
 slot = PriorityLock()
 
 
@@ -34,7 +34,12 @@ slot = PriorityLock()
 async def lifespan(_: FastAPI):
     global adapter
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
-    adapter = TransformersAdapter(MODEL_ID)
+    if RUNTIME == "mlx":  # ağır bağımlılıklar yalnız seçilen runtime için import edilir
+        from app.adapters.mlx_adapter import MlxAdapter
+        adapter = MlxAdapter(MODEL_ID)
+    else:
+        from app.adapters.transformers_adapter import TransformersAdapter
+        adapter = TransformersAdapter(MODEL_ID)
     adapter.load()
     adapter.warmup()  # ilk çağrı ~18 sn sürüyor (S0); kullanıcı beklemesin
     yield

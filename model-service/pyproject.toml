@@ -5,6 +5,13 @@ requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.115",
   "uvicorn[standard]>=0.30",
+]
+
+[project.optional-dependencies]
+# Apple Silicon (önerilen: 4-bit, 16 GB Mac'te swap'siz). Bkz. docs/s0-spike.md
+mlx = ["mlx-vlm>=0.7.8"]
+# NVIDIA / CPU / MPS bf16
+transformers = [
   "transformers>=5.20",
   "torch>=2.14",
   "torchvision",

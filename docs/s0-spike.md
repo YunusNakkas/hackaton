@@ -40,10 +40,9 @@ Tahmini tur süresi (çalışan konuşmayı bitirdikten sonra): ASR ~1 sn + ceva
 5. **Puanlarda ±1 sapma var.** Değerlendirmede daha düşük temperature denenmeli. Bu deterministik veya doğru sonuç garantisi vermez; offline tutarlılık testiyle ölçülecek.
 6. **Ses girişi en fazla 30 sn** (model kartı). Sözleşme v0.1.1 bu sınıra göre güncellendi.
 
-## Karar
+## İlk karar (sonra değişti, aşağıya bakın)
 
-- **P0 modeli:** `gemma-4-E2B-it`, bf16, Transformers+MPS.
-- **Yedek:** bellek sorunu demoda tekrarlarsa resmî 4-bit QAT sürümü (`gemma-4-E2B-it-qat-*` / E4B GGUF 6,1 GB) ölçülecek.
+- ~~P0 modeli: `gemma-4-E2B-it`, bf16, Transformers+MPS.~~ Uçtan uca denemede swap sorunu çıktı.
 - **E4B bf16 (16 GB) ve 12B bu makinede kullanılamaz.**
 
 ## Uçtan uca deneme (gerçek model + Yelda TTS)
@@ -64,6 +63,34 @@ Bulgular:
 3. **ASR sözlük ipucu "kayıt → kayıp" hatasını düzeltmedi.** Başka yaklaşım (ör. senaryo bağlamını prompt'a eklemek) denenecek.
 4. Müşteri personası rolünde kaldı ve politikayı zorladı ("Üç iş günü çok uzun").
 
+## 4-bit: MLX + Gemma 4 E4B
+
+Adaylar (hepsinde ses ağırlıkları var): `mlx-community/gemma-4-e2b-it-4bit` (3,55 GB), `mlx-community/gemma-4-e4b-it-4bit` (5,15 GB). `*-qat-mobile` sürümleri ses kodlayıcısını 2-bit'e indirdiği için ASR açısından riskli görülüp elendi. Daha kaliteli olan E4B sığdığı için önce o ölçüldü.
+
+Ölçüm `eval/s0/spike_service.py` ile servis HTTP API'si üzerinden yapıldı (aynı girdiler, `eval/s0/common.py`). Runtime: mlx 0.32.4, mlx-vlm 0.7.8.
+
+| | E2B bf16, Transformers | **E4B 4-bit, MLX** |
+|---|---|---|
+| Model belleği | 10,2 GB | **5,4 GB** (tepe) |
+| ASR WER / CER | %18,2 / %5,1 | **%12,5 / %3,5** |
+| ASR medyan | 0,99 sn | **0,63 sn** |
+| 20 sn boşta kaldıktan sonra ASR | 14–40 sn | **0,63–1,15 sn** (5/5) |
+| Müşteri cevabı medyan | 0,94 sn | **0,49 sn** |
+| Değerlendirme (sabit prompt) | 35 sn, 3/3 geçerli | **14 sn, 3/3 geçerli** |
+| Uçtan uca tur (ASR+cevap+TTS) | 3,6–41,8 sn | **2,2–2,5 sn** (2 koşu, 4 tur) |
+| Uçtan uca değerlendirme | 54 sn | **28–32 sn** |
+
+Notlar:
+- Basit spike persona prompt'unda 5 cevaptan 2'si çalışan gibi konuştu ("paranızı karta iade edebilirsiniz"). Backend'in persona prompt'uyla yapılan uçtan uca koşularda 4/4 cevap rolde kaldı. Örneklem küçük; senaryo testlerinde izlenmeli.
+- ASR "kayıt → kayıp" ve "satın alma kaydınızı → satın almak aykınınızı" hataları sürüyor; değerlendirme bu hatalı transkripti alıntılıyor (alıntı transkriptle tutarlı olduğu için doğrulanmış sayılıyor). Yönetici ses dinleme özelliği bu yüzden önemli.
+- Puan sapması: E4B'de solution 1/2/1, clarity 1/2/2 (temperature 1.0).
+
+## Karar
+
+- **Mac (P0 demo):** `mlx-community/gemma-4-e4b-it-4bit`, `PM_RUNTIME=mlx`.
+- **NVIDIA:** `PM_RUNTIME=transformers`, `google/gemma-4-E4B-it` (aynı servis arayüzü).
+- E2B bf16 Transformers yolu kodda duruyor ama 16 GB Mac'te önerilmez.
+
 ## Sırada
 
 - [ ] Gerçek mikrofon kayıtlarıyla ASR (5–10 kayıt, farklı kişiler)
@@ -71,4 +98,5 @@ Bulgular:
 - [ ] ElevenLabs Türkçe TTS gecikmesi ve kalitesi
 - [ ] Değerlendirmede temperature 0,3 ile tutarlılık
 - [ ] 15 tur art arda ısınma/yavaşlama testi
-- [ ] **4-bit sürümün bellek/kalite karşılaştırması (öncelikli: swap sorunu)**
+- [x] 4-bit sürümün bellek/kalite karşılaştırması → MLX E4B 4-bit seçildi
+- [ ] E2B 4-bit ile karşılaştırma (daha hızlı ama muhtemelen daha az doğru; gerekirse)
