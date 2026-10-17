@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: ProvaMüşteri API
-  version: 0.1.2
+  version: 0.2.0
   description: |
     Sesli müşteri provası ve yönetici inceleme platformu. Bu dosya frontend ile backend
     arasındaki tek otoritedir; değişiklikler `contracts/README.md` kurallarına göre yapılır.
@@ -542,6 +542,74 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/ValidationError" }
 
+  /admin/policy-extractions:
+    post:
+      tags: [admin]
+      operationId: createPolicyExtraction
+      description: |
+        Menü, broşür veya kural panosu fotoğraflarından (1–3 adet) Gemma ile politika metni çıkarır.
+        202 döner; `job_id` yoklanır, bitince `status=ready` ve `policies` dolar.
+        Çıkarılan politikalar doğrudan yayımlanmaz: yönetici okuyup düzeltir ve taslak formunun
+        `policies` alanına kendisi aktarır. Her politika hangi fotoğraftan geldiğini (`image_id`) taşır.
+        Biçimler: JPEG, PNG, WebP, HEIC/HEIF (iPhone). Her fotoğraf en fazla 10 MB.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: "#/components/schemas/CreatePolicyExtractionForm" }
+            encoding:
+              images:
+                contentType: image/jpeg, image/png, image/webp, image/heic, image/heif
+      responses:
+        "202":
+          description: Fotoğraflar alındı, okuma kuyrukta
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PolicyExtraction" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /admin/policy-extractions/{extractionId}:
+    get:
+      tags: [admin]
+      operationId: getPolicyExtraction
+      parameters:
+        - $ref: "#/components/parameters/ExtractionId"
+      responses:
+        "200":
+          description: Okuma durumu ve (hazırsa) çıkarılan politikalar
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PolicyExtraction" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/policy-extractions/{extractionId}/images/{imageId}:
+    get:
+      tags: [admin]
+      operationId: getPolicyExtractionImage
+      description: Yüklenen fotoğraf (JPEG'e çevrilmiş). Yönetici çıkarılan metni fotoğrafla karşılaştırır.
+      parameters:
+        - $ref: "#/components/parameters/ExtractionId"
+        - name: imageId
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/Id" }
+      responses:
+        "200":
+          description: Fotoğraf
+          content:
+            image/jpeg: { schema: { type: string, format: binary } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /admin/training-drafts:
     get:
       tags: [admin]
@@ -695,6 +763,11 @@ components:
       in: path
       required: true
       schema: { $ref: "#/components/schemas/Id" }
+    ExtractionId:
+      name: extractionId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/Id" }
     DraftId:
       name: draftId
       in: path
@@ -813,6 +886,7 @@ components:
         - audio_too_long
         - audio_undecodable
         - no_speech
+        - image_undecodable
         - validation_error
         - rate_limited
         - model_unavailable
@@ -966,6 +1040,42 @@ components:
             - { $ref: "#/components/schemas/Id" }
             - { type: "null" }
         client_request_id: { type: string, format: uuid }
+        practice:
+          description: |
+            Doluysa oturum, raporu çıkmış bir önceki oturumun tekrarıdır. Rapordaki iki düğme:
+            `same` → aynı senaryo + odak hedefi; `adaptive` → müşteri odak boyuta göre zorlaşır.
+            Önceki oturum kullanıcının kendi oturumu, değerlendirmesi `ready`/`needs_review` ve
+            `training_id` ile aynı eğitim olmalı (aksi 404/409/422).
+          oneOf:
+            - { $ref: "#/components/schemas/PracticeRequest" }
+            - { type: "null" }
+    PracticeMode:
+      type: string
+      enum: [same, adaptive]
+    PracticeRequest:
+      type: object
+      required: [of_session_id, mode, focus_dimension_ids]
+      additionalProperties: false
+      properties:
+        of_session_id: { $ref: "#/components/schemas/Id" }
+        mode: { $ref: "#/components/schemas/PracticeMode" }
+        focus_dimension_ids:
+          type: array
+          minItems: 1
+          maxItems: 3
+          uniqueItems: true
+          description: Genellikle önceki raporun `practice_drill.focus_dimension_ids` değeri.
+          items: { type: string }
+    PracticeInfo:
+      type: object
+      required: [of_session_id, mode, focus_dimensions]
+      properties:
+        of_session_id: { $ref: "#/components/schemas/Id" }
+        mode: { $ref: "#/components/schemas/PracticeMode" }
+        focus_dimensions:
+          type: array
+          description: Ekranda "Bu sefer şuna odaklan" olarak gösterilir.
+          items: { $ref: "#/components/schemas/RubricDimensionPublic" }
     CreateSessionResponse:
       type: object
       required: [session, opening_job_id]
@@ -1020,6 +1130,7 @@ components:
         - employee_turn_count
         - max_turns
         - pending_job_id
+        - practice
         - started_at
         - finished_at
       properties:
@@ -1031,6 +1142,11 @@ components:
           properties:
             id: { $ref: "#/components/schemas/Id" }
             display_name: { type: string }
+        practice:
+          description: Tekrar oturumuysa mod ve odak boyutlar; değilse null.
+          oneOf:
+            - { $ref: "#/components/schemas/PracticeInfo" }
+            - { type: "null" }
         assignment_id:
           oneOf:
             - { $ref: "#/components/schemas/Id" }
@@ -1105,9 +1221,15 @@ components:
         - review_status
         - total
         - employee_turn_count
+        - practice_mode
         - started_at
         - finished_at
       properties:
+        practice_mode:
+          description: Tekrar oturumuysa modu; değilse null.
+          oneOf:
+            - { $ref: "#/components/schemas/PracticeMode" }
+            - { type: "null" }
         id: { $ref: "#/components/schemas/Id" }
         training: { $ref: "#/components/schemas/TrainingSummary" }
         employee:
@@ -1145,7 +1267,7 @@ components:
     # ------------------------------------------------------------ iş
     JobKind:
       type: string
-      enum: [opening, turn, evaluation, draft_generation]
+      enum: [opening, turn, evaluation, draft_generation, policy_extraction]
     JobStatus:
       type: string
       enum: [queued, transcribing, generating, synthesizing, evaluating, ready, error]
@@ -1154,6 +1276,7 @@ components:
         turn: queued → transcribing → generating → synthesizing → ready
         evaluation: queued → evaluating → ready
         draft_generation: queued → generating → ready
+        policy_extraction: queued → generating → ready
     Job:
       type: object
       required: [id, kind, status, attempt, poll_after_ms, created_at, updated_at, result, error]
@@ -1175,6 +1298,7 @@ components:
             - { $ref: "#/components/schemas/OpeningJobResult" }
             - { $ref: "#/components/schemas/EvaluationJobResult" }
             - { $ref: "#/components/schemas/DraftJobResult" }
+            - { $ref: "#/components/schemas/PolicyExtractionJobResult" }
             - { type: "null" }
         error:
           description: Yalnız `error` iken dolu.
@@ -1221,6 +1345,12 @@ components:
       properties:
         kind: { type: string, const: draft_generation }
         draft_id: { $ref: "#/components/schemas/Id" }
+    PolicyExtractionJobResult:
+      type: object
+      required: [kind, extraction_id]
+      properties:
+        kind: { type: string, const: policy_extraction }
+        extraction_id: { $ref: "#/components/schemas/Id" }
 
     # ------------------------------------------------------------ değerlendirme
     EvaluationStatus:
@@ -1336,7 +1466,12 @@ components:
         - model_run
         - manager_review
         - effective_total
+        - focus_dimension_ids
       properties:
+        focus_dimension_ids:
+          type: array
+          description: Tekrar oturumunda öne çıkarılacak boyutlar; normal oturumda boş.
+          items: { type: string }
         rubric_version: { type: string }
         dimensions:
           type: array
@@ -1501,6 +1636,63 @@ components:
           items: { $ref: "#/components/schemas/Id" }
 
     # ------------------------------------------------------------ taslak
+    CreatePolicyExtractionForm:
+      type: object
+      required: [images]
+      properties:
+        images:
+          type: array
+          minItems: 1
+          maxItems: 3
+          items: { type: string, format: binary }
+    ExtractionImage:
+      type: object
+      required: [id, filename, width, height]
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        filename: { type: string }
+        width: { type: integer, minimum: 1 }
+        height: { type: integer, minimum: 1 }
+    ExtractedPolicy:
+      type: object
+      required: [title, body, image_id, uncertain]
+      properties:
+        title: { type: string }
+        body:
+          type: string
+          description: Fotoğraftaki metin; model yorum eklemez, okunamayan kısmı "[okunamadı]" yazar.
+        image_id: { $ref: "#/components/schemas/Id" }
+        uncertain:
+          type: boolean
+          description: Metnin bir kısmı okunamadı veya belirsiz; yönetici fotoğrafla karşılaştırmalı.
+    PolicyExtractionStatus:
+      type: string
+      enum: [processing, ready, error]
+    PolicyExtraction:
+      type: object
+      required: [id, status, job_id, images, policies, warnings, error, created_at]
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        status: { $ref: "#/components/schemas/PolicyExtractionStatus" }
+        job_id: { $ref: "#/components/schemas/Id" }
+        images:
+          type: array
+          items: { $ref: "#/components/schemas/ExtractionImage" }
+        policies:
+          description: Yalnız `ready` iken dolu. Boş liste, fotoğrafta politika bulunamadığı anlamına gelir.
+          oneOf:
+            - type: array
+              items: { $ref: "#/components/schemas/ExtractedPolicy" }
+            - { type: "null" }
+        warnings:
+          type: array
+          description: Ör. "2. fotoğraf bulanık", "fotoğrafta metin bulunamadı".
+          items: { type: string }
+        error:
+          oneOf:
+            - { $ref: "#/components/schemas/JobError" }
+            - { type: "null" }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
     DraftStatus:
       type: string
       enum: [generating, ready, error, published]

@@ -81,15 +81,30 @@
       "scored_dimensions": 3,
       "total_dimensions": 4
     },
-    "strengths": ["Politikayı doğru aktardı.", "Kibar bir açılış yaptı."],
-    "improvements": ["Müşterinin duygusunu açıkça kabul edin.", "İadenin ne kadar süreceğini söyleyin."],
+    "strengths": [
+      "Politikayı doğru aktardı.",
+      "Kibar bir açılış yaptı."
+    ],
+    "improvements": [
+      "Müşterinin duygusunu açıkça kabul edin.",
+      "İadenin ne kadar süreceğini söyleyin."
+    ],
     "practice_drill": {
       "title": "Duyguyu kabul et, sonra çöz",
       "instructions": "Aynı müşteriyle tekrar konuşun; ilk cümlenizde yaşadığı zorluğu kabul edin, ikinci cümlede somut süre verin.",
-      "focus_dimension_ids": ["empathy", "solution"],
-      "example_phrases": ["Fişi kaybetmek gerçekten can sıkıcı, hemen bakalım.", "Kayıt bulunursa iade 3 iş günü içinde kartınıza yansır."]
+      "focus_dimension_ids": [
+        "empathy",
+        "solution"
+      ],
+      "example_phrases": [
+        "Fişi kaybetmek gerçekten can sıkıcı, hemen bakalım.",
+        "Kayıt bulunursa iade 3 iş günü içinde kartınıza yansır."
+      ]
     },
-    "flags": ["unverified_evidence", "short_session"],
+    "flags": [
+      "unverified_evidence",
+      "short_session"
+    ],
     "model_run": {
       "model": "gemma-4-e4b-it",
       "runtime": "stub",
@@ -104,7 +119,8 @@
       "complete": false,
       "scored_dimensions": 3,
       "total_dimensions": 4
-    }
+    },
+    "focus_dimension_ids": []
   },
   "error": null
 }

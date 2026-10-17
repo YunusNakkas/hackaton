@@ -84,7 +84,8 @@ def compute_total(scores: dict[str, int | None], rubric: dict[str, Any]) -> dict
 
 def build_report(data: dict[str, Any], *, rubric: dict[str, Any], rubric_version: str,
                  policies: list[dict[str, Any]], turns_by_label: dict[str, LabeledTurn],
-                 model_run: dict[str, Any], employee_turn_count: int) -> tuple[dict[str, Any], str]:
+                 model_run: dict[str, Any], employee_turn_count: int,
+                 focus_ids: list[str] | None = None) -> tuple[dict[str, Any], str]:
     """Doğrulanmış rapor ve durum (ready | needs_review) döner. Şekil önceden check_shape ile kontrol edilmiş olmalı."""
     flags: set[str] = set()
     if model_run.get("repaired"):
@@ -147,6 +148,7 @@ def build_report(data: dict[str, Any], *, rubric: dict[str, Any], rubric_version
         "practice_drill": drill,
         "flags": sorted(flags),
         "model_run": model_run,
+        "focus_dimension_ids": [f for f in (focus_ids or []) if f in by_id],
     }
     return report, "needs_review" if flags & REVIEW_FLAGS else "ready"
 
@@ -158,5 +160,6 @@ def apply_review(report: dict[str, Any], review: dict[str, Any] | None, rubric: 
         for adj in review["adjustments"]:
             if adj["dimension_id"] in scores:
                 scores[adj["dimension_id"]] = adj["score"]
-    return {**report, "manager_review": review,
+    # focus_dimension_ids v0.2.0'da eklendi; eski raporlarda yok.
+    return {"focus_dimension_ids": [], **report, "manager_review": review,
             "effective_total": compute_total(scores, rubric) if review else report["total"]}

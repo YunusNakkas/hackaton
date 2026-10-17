@@ -112,7 +112,8 @@
       "complete": true,
       "scored_dimensions": 4,
       "total_dimensions": 4
-    }
+    },
+    "focus_dimension_ids": []
   },
   "error": null
 }

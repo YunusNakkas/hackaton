@@ -93,6 +93,10 @@ class PracticeSession(Base):
     prompt_version: Mapped[str] = mapped_column(String(40))
     started_at: Mapped[datetime] = _created()
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # "Tekrar dene": raporu çıkmış önceki oturumun tekrarı. mode: same | adaptive
+    practice_of_session_id: Mapped[str | None] = mapped_column(ForeignKey("practice_sessions.id"))
+    practice_mode: Mapped[str | None] = mapped_column(String(16))
+    practice_focus: Mapped[list[str] | None] = mapped_column(JSON)
 
 
 class Turn(Base):

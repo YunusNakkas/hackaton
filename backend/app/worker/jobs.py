@@ -130,7 +130,10 @@ def process_turn(db: Session, job: Job, settings: Settings, model: ModelClient) 
     if "reply_text" not in state:
         _stage(db, job, "generating")
         history = [(x.speaker, x.text) for x in _ready_history(db, s.id, turn.index)]
-        messages = prompts.customer_messages(t.scenario, t.policies, [*history, ("employee", turn.text)])
+        adaptive = ""
+        if s.practice_mode == "adaptive":
+            adaptive = prompts.adaptive_instructions(t.rubric, s.practice_focus or [])
+        messages = prompts.customer_messages(t.scenario, t.policies, [*history, ("employee", turn.text)], adaptive)
         stub_ctx = {"scenario": t.scenario, "employee_text": turn.text or "", "history": history}
         reply, ended = clean_reply(model.chat(
             messages, max_new_tokens=120, temperature=1.0, purpose="customer_reply", stub_context=stub_ctx))
@@ -185,7 +188,7 @@ def process_evaluation(db: Session, job: Job, settings: Settings, model: ModelCl
     stub_ctx = {"dimension_ids": dim_ids,
                 "employee_turns": [(f"t{x.index}", x.text) for x in turns if x.speaker == "employee"]}
 
-    messages = prompts.evaluation_messages(t.scenario, t.policies, t.rubric, labeled)
+    messages = prompts.evaluation_messages(t.scenario, t.policies, t.rubric, labeled, s.practice_focus or [])
     raw = model.chat(messages, max_new_tokens=1400, temperature=settings.eval_temperature,
                      purpose="evaluation", stub_context=stub_ctx)
     repaired = False
@@ -207,7 +210,8 @@ def process_evaluation(db: Session, job: Job, settings: Settings, model: ModelCl
                  "generated_at": iso(utcnow()), "repaired": repaired}
     report, status = evalsvc.build_report(
         data, rubric=t.rubric, rubric_version=t.rubric_version, policies=t.policies, turns_by_label=by_label,
-        model_run=model_run, employee_turn_count=sum(1 for x in turns if x.speaker == "employee"))
+        model_run=model_run, employee_turn_count=sum(1 for x in turns if x.speaker == "employee"),
+        focus_ids=s.practice_focus or [])
     ev.report, ev.status, ev.error = report, status, None
     return {"kind": "evaluation", "session_id": s.id, "evaluation_status": status}
 

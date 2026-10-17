@@ -15,7 +15,7 @@ from app.core.ids import iso
 from app.models import Assignment, Job, Organization, PracticeSession, Training, Turn, User
 
 ACTIVE_JOB_STATES = ("queued", "transcribing", "generating", "synthesizing", "evaluating")
-JOB_POLL_MS = {"opening": 500, "turn": 750, "evaluation": 2000, "draft_generation": 2000}
+JOB_POLL_MS = {"opening": 500, "turn": 750, "evaluation": 2000, "draft_generation": 2000, "policy_extraction": 2000}
 
 
 def me(user: User, org: Organization) -> dict[str, Any]:
@@ -82,9 +82,18 @@ def session_json(db: Session, s: PracticeSession, evaluation_status: str | None,
         "versions": versions(t, s.prompt_version),
         "turns": [turn_json(x) for x in turns],
         "employee_turn_count": sum(1 for x in turns if x.speaker == "employee" and x.status == "ready"),
-        "max_turns": t.max_turns, "pending_job_id": pending,
+        "max_turns": t.max_turns, "pending_job_id": pending, "practice": practice_json(s, t),
         "started_at": iso(s.started_at), "finished_at": iso(s.finished_at),
     }
+
+
+def practice_json(s: PracticeSession, t: Training) -> dict[str, Any] | None:
+    if not s.practice_mode:
+        return None
+    dims = {d["id"]: d for d in t.rubric["dimensions"]}
+    focus = [{"id": d["id"], "name": d["name"], "description": d["description"]}
+             for f in (s.practice_focus or []) if (d := dims.get(f))]
+    return {"of_session_id": s.practice_of_session_id, "mode": s.practice_mode, "focus_dimensions": focus}
 
 
 def evaluation_state(db: Session, s: PracticeSession) -> tuple[str | None, str]:
@@ -172,7 +181,7 @@ def session_summary(db: Session, s: PracticeSession) -> dict[str, Any]:
         "id": s.id, "training": training_summary(db.get(Training, s.training_id)),
         "employee": {"id": emp.id, "display_name": emp.display_name},
         "status": s.status, "evaluation_status": ev_status, "review_status": review_status,
-        "total": effective_total(db, s), "employee_turn_count": turns,
+        "total": effective_total(db, s), "employee_turn_count": turns, "practice_mode": s.practice_mode,
         "started_at": iso(s.started_at), "finished_at": iso(s.finished_at),
     }
 

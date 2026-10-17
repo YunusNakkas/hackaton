@@ -1,0 +1,23 @@
+{
+  "id": "01JA000000000000000000PX01",
+  "status": "processing",
+  "job_id": "01JA000000000000000000JB05",
+  "images": [
+    {
+      "id": "01JA000000000000000000PH01",
+      "filename": "iade-panosu.jpg",
+      "width": 1600,
+      "height": 1200
+    },
+    {
+      "id": "01JA000000000000000000PH02",
+      "filename": "kampanya.heic",
+      "width": 1200,
+      "height": 1600
+    }
+  ],
+  "policies": null,
+  "warnings": [],
+  "error": null,
+  "created_at": "2026-10-18T10:00:00Z"
+}

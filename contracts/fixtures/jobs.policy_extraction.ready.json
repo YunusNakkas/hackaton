@@ -1,0 +1,14 @@
+{
+  "id": "01JA000000000000000000JB05",
+  "kind": "policy_extraction",
+  "status": "ready",
+  "attempt": 1,
+  "poll_after_ms": 2000,
+  "created_at": "2026-10-18T10:00:00Z",
+  "updated_at": "2026-10-18T10:00:25Z",
+  "result": {
+    "kind": "policy_extraction",
+    "extraction_id": "01JA000000000000000000PX01"
+  },
+  "error": null
+}
