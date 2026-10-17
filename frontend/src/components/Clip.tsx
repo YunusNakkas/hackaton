@@ -4,6 +4,7 @@ export function Clip({ src, autoPlay = false }: { src: string; autoPlay?: boolea
   const audio = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
   const [blocked, setBlocked] = useState(false);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     const element = audio.current;
@@ -23,9 +24,8 @@ export function Clip({ src, autoPlay = false }: { src: string; autoPlay?: boolea
           const element = audio.current;
           if (!element) return;
           if (element.paused) {
-            void element.play();
-            setPlaying(true);
-            setBlocked(false);
+            setError(false);
+            element.play().then(() => { setPlaying(true); setBlocked(false); }, () => { setPlaying(false); setError(true); });
           } else {
             element.pause();
             setPlaying(false);
@@ -34,12 +34,14 @@ export function Clip({ src, autoPlay = false }: { src: string; autoPlay?: boolea
       >
         {playing ? "Durdur" : blocked ? "Dinlemek için dokun" : "Dinle"}
       </button>
+      {error && <p role="alert" className="mt-1 text-xs text-accent">Ses oynatılamadı. Tekrar deneyin.</p>}
       <audio
         ref={audio}
         src={src}
         preload="auto"
         onEnded={() => setPlaying(false)}
         onPause={() => setPlaying(false)}
+        onError={() => { setPlaying(false); setError(true); }}
       />
     </div>
   );

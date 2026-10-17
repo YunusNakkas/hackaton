@@ -60,6 +60,7 @@ export function App() {
             <Route element={<Gate />}>
               <Route path="/" element={<HomePage />} />
               <Route path="/admin" element={<ManagerRoute />} />
+              <Route path="/admin/overview" element={<ManagerRoute />} />
               <Route path="/trainings/:trainingId" element={<TrainingPage />} />
               <Route path="/sessions/:sessionId" element={<SessionPage />} />
             </Route>

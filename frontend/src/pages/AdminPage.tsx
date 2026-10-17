@@ -1,13 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { api, allPages } from "../api/client";
+import { api, allPages, isApiError } from "../api/client";
 import type {
   AdminOverview,
   EvaluationEnvelope,
   Employee, SessionSummary, TrainingSummary, TrainingDraft,
 } from "../api/types";
 import { DraftEditor } from "../components/DraftEditor";
+import { DraftJobStatus } from "../components/DraftJobStatus";
 import { AssignModal } from "../components/AssignModal";
 import { CreateDraftModal } from "../components/CreateDraftModal";
 import { CreateEmployeeModal } from "../components/CreateEmployeeModal";
@@ -107,7 +108,7 @@ export function AdminPage() {
     <div className="space-y-8 animate-in fade-in duration-300">
       {feedback && <p role="status" className="rounded-2xl bg-pine-soft p-4 text-pine">{feedback}</p>}
       {[overview, employees, sessions, drafts, trainings, evalForReview].filter(q => q.isError).map((q, i) => <p key={i} role="alert" className="rounded-2xl bg-accent-soft p-4 text-accent">{q.error?.message} <button className="underline" onClick={() => void q.refetch()}>Tekrar dene</button></p>)}
-      {publishDraftMutation.error && <p role="alert" className="text-accent">{publishDraftMutation.error.message}</p>}
+      {publishDraftMutation.error && <p role="alert" className="text-accent">{publishDraftMutation.error.message} {isApiError(publishDraftMutation.error) && publishDraftMutation.error.status === 409 && <button className="underline" onClick={() => { const id = publishDraftMutation.variables?.draftId; publishDraftMutation.reset(); void queryClient.invalidateQueries({ queryKey: ["admin-drafts"] }); if (id) { void queryClient.invalidateQueries({ queryKey: ["admin-draft", id] }); setEditingDraftId(id); } }}>Güncel sürümü incele</button>}</p>}
       {reviewingSessionId && evalForReview.isFetching && <p role="status">Değerlendirme yükleniyor…</p>}
       {/* Başlık ve Hızlı Eylem Alanı */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -696,6 +697,7 @@ export function AdminPage() {
                     <p className="text-xs text-muted">
                       {draft.form.policies.length} Politika Kuralı · {draft.form.scenario_count} Senaryo Hedefi · v{draft.version}
                     </p>
+                    {draft.generation_job_id && (draft.status === "generating" || draft.status === "error") && <DraftJobStatus jobId={draft.generation_job_id} />}
 
                     {draft.warnings && draft.warnings.length > 0 && (
                       <p className="text-xs text-warn">
@@ -723,9 +725,7 @@ export function AdminPage() {
                       </button>
                     )}
                     {draft.status === "published" && (
-                      <span className="text-xs font-medium text-pine">
-                        Yayında ({draft.published_training_ids.length} eğitim)
-                      </span>
+                      <div className="space-y-2 text-xs font-medium text-pine"><p>Yayında ({draft.published_training_ids.length} eğitim)</p>{draft.published_training_ids.map((id, index) => <button key={id} type="button" className="rounded-full border border-line px-4 py-2 text-primary" onClick={() => { setAssignTrainingId(id); setAssignOpen(true); }}>{draft.published_training_ids.length > 1 ? `${index + 1}. eğitimi ata` : "Çalışanlara ata"}</button>)}</div>
                     )}
                   </div>
                 </div>

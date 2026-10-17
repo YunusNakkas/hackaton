@@ -28,7 +28,7 @@ export function SessionPage() {
   const sessionQuery = useQuery({
     queryKey: ["session", sessionId],
     queryFn: () => api<Session>(`/sessions/${sessionId}`),
-    refetchInterval: query => query.state.data?.status === "active" ? 3000 : false,
+    refetchInterval: query => query.state.data?.status === "active" ? 3000 : 15000,
   });
   const session = sessionQuery.data;
   const liveJobId = session?.status === "active" ? session.pending_job_id : null;
@@ -48,7 +48,7 @@ export function SessionPage() {
     queryKey: ["evaluation", sessionId],
     enabled: session?.status === "finished",
     queryFn: () => api<EvaluationEnvelope>(`/sessions/${sessionId}/evaluation`),
-    refetchInterval: (query) => (query.state.data?.status === "pending" ? 1500 : false),
+    refetchInterval: (query) => (query.state.data?.status === "pending" ? 1500 : 15000),
   });
 
   const evalJobId = evaluation.data?.status === "pending" ? evaluation.data.evaluation_job_id : null;
@@ -251,7 +251,7 @@ export function SessionPage() {
         ref={thread}
         className={`min-h-0 flex-1 space-y-4 overflow-y-auto ${finished ? "mt-10 border-t border-line pt-8" : "my-4"}`}
       >
-        {finished && <li className="text-sm text-muted">Konuşma</li>}
+        <li className="text-sm text-muted">{finished ? "Konuşma · " : ""}Yazılı tur sesleri metinden üretilir.</li>
         {session.turns.map((turn) => (
           <li key={turn.id} className={turn.speaker === "employee" ? "flex justify-end" : ""}>
             <article

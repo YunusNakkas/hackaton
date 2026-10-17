@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { api } from "../api/client";
+import { api, isApiError } from "../api/client";
 import type { TrainingDraft } from "../api/types";
 import { ModalFrame } from "./ModalFrame";
 
@@ -46,6 +46,7 @@ export function DraftEditor({ draftId, onClose }: { draftId: string; onClose: ()
       <header className="mb-6 flex items-center justify-between gap-4"><h2 id="draft-title" className="font-serif text-2xl">Taslağı incele ve düzenle</h2><button aria-label="Kapat" onClick={onClose}>✕</button></header>
       {draft.isLoading && <p>Yükleniyor…</p>}
       {draft.error && <p role="alert" className="text-accent">{draft.error.message}</p>}
+      {!!draft.data?.warnings.length && <aside className="mb-4 rounded-xl bg-warn-soft p-4 text-sm text-warn"><h3 className="font-semibold">Yayımlamadan önce kontrol edin</h3><ul className="mt-2 list-inside list-disc">{draft.data.warnings.map((warning, i) => <li key={i}>{warning}</li>)}</ul></aside>}
       {data && <form onSubmit={e => { e.preventDefault(); save.mutate(); }} className="space-y-6">
         <fieldset disabled={!editable || save.isPending} className="space-y-6 disabled:opacity-80">
           {data.scenarios.map((scenario, i) => <section key={scenario.key} className="space-y-3 rounded-2xl border border-line p-4">
@@ -64,7 +65,7 @@ export function DraftEditor({ draftId, onClose }: { draftId: string; onClose: ()
           <section className="space-y-4"><h3 className="font-semibold">İşletme politikaları</h3>{data.policies.map((p, i) => <div key={p.id} className="space-y-2"><Field title="Politika başlığı" value={p.title} onChange={v => change(c => { c.policies[i].title = v; })} /><Field title="Kural" multiline value={p.body} onChange={v => change(c => { c.policies[i].body = v; })} /></div>)}</section>
           <section className="space-y-4"><h3 className="font-semibold">Değerlendirme ölçütleri</h3>{data.rubric.dimensions.map((d, i) => <div key={d.id} className="space-y-3 rounded-2xl border border-line p-4"><Field title="Ölçüt adı" value={d.name} onChange={v => change(c => { c.rubric.dimensions[i].name = v; })} /><Field title="Açıklama" value={d.description} onChange={v => change(c => { c.rubric.dimensions[i].description = v; })} /><label>Ağırlık<input required type="number" min={0.01} step={0.01} className={input} value={d.weight} onChange={e => change(c => { c.rubric.dimensions[i].weight = Number(e.target.value); })} /></label>{d.levels.map((level, j) => <Field key={j} title={`${j} puan açıklaması`} value={level} onChange={v => change(c => { c.rubric.dimensions[i].levels[j] = v; })} />)}</div>)}</section>
         </fieldset>
-        {save.error && <p role="alert" className="text-accent">{save.error.message} {save.error.message.includes("başka biri") && <button type="button" className="underline" onClick={() => { setContent(null); setVersion(null); save.reset(); void draft.refetch(); }}>Güncel taslağı yükle</button>}</p>}
+        {save.error && <p role="alert" className="text-accent">{save.error.message} {isApiError(save.error) && save.error.status === 409 && <button type="button" className="underline" onClick={() => { setContent(null); setVersion(null); save.reset(); void draft.refetch(); }}>Güncel taslağı yükle (yerel düzenlemeleri bırak)</button>}</p>}
         {message && <p role="status" className="text-pine">{message}</p>}
         {editable && <button disabled={!content || save.isPending} className="rounded-full bg-primary px-5 py-2 text-white disabled:opacity-50">{save.isPending ? "Kaydediliyor…" : "Değişiklikleri Kaydet"}</button>}
       </form>}

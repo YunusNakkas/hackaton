@@ -74,6 +74,7 @@ export function ReportView({ report }: { report: EvaluationReport }) {
                 {dimension.evidence.map((item) => (
                   <li key={`${item.turn_id}-${item.quote}`} className="border-l-2 border-line pl-3 text-sm">
                     <span className="text-ink">“{item.quote}”</span>
+                    <span className={`ml-2 rounded-full px-2 py-0.5 text-xs ${item.verified ? "bg-pine-soft text-pine" : "bg-warn-soft text-warn"}`}>{item.verified ? "Doğrulandı" : "Doğrulanamadı"}</span>
                     {!item.verified && (
                       <span className="mt-0.5 block text-warn">Bu alıntı transkriptte doğrulanamadı.</span>
                     )}
@@ -81,6 +82,7 @@ export function ReportView({ report }: { report: EvaluationReport }) {
                 ))}
               </ul>
             )}
+            {dimension.policy_refs.length > 0 && <div className="mt-4 space-y-2 border-t border-line pt-3"><p className="text-xs font-semibold text-muted">İşletme kuralları</p>{dimension.policy_refs.map((policy, index) => <div key={`${policy.policy_id}-${index}`} className="text-sm"><p className="font-medium">{policy.title} <span className={`ml-2 text-xs ${policy.verified ? "text-pine" : "text-warn"}`}>{policy.verified ? "Doğrulandı" : "Doğrulanamadı"}</span></p>{policy.quote && <p className="mt-1 text-muted">“{policy.quote}”</p>}</div>)}</div>}
           </article>
         ))}
       </div>
