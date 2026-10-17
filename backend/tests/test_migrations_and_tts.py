@@ -10,7 +10,8 @@ BACKEND = Path(__file__).resolve().parents[1]
 
 def test_migrations_match_models(tmp_path):
     """Alembic migration'ları modellerle aynı şemayı üretmeli (unutulmuş migration'ı yakalar)."""
-    env = {"PM_DATABASE_URL": f"sqlite:///{tmp_path / 'm.sqlite3'}", "PATH": "/usr/bin:/bin"}
+    import os
+    env = {**os.environ, "PM_DATABASE_URL": f"sqlite:///{tmp_path / 'm.sqlite3'}"}
     alembic = [sys.executable, "-m", "alembic"]
     up = subprocess.run([*alembic, "upgrade", "head"], cwd=BACKEND, env=env, capture_output=True, text=True)
     assert up.returncode == 0, up.stderr

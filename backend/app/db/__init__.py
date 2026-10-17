@@ -13,6 +13,10 @@ class Base(DeclarativeBase):
 
 def make_engine(url: str) -> Engine:
     is_sqlite = url.startswith("sqlite")
+    if is_sqlite and ":///" in url and not url.startswith("sqlite:///:memory:"):
+        from pathlib import Path
+        db_file = url.split(":///", 1)[1]
+        Path(db_file).parent.mkdir(parents=True, exist_ok=True)
     engine = create_engine(url, connect_args={"check_same_thread": False} if is_sqlite else {})
     if is_sqlite:
 
