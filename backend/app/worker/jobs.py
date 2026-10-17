@@ -224,8 +224,15 @@ def process_draft(db: Session, job: Job, settings: Settings, model: ModelClient)
     requested = draft.form["scenario_count"]
 
     def parse(text: str):
+        # Biçim onarımı (anahtar, seviye, sızan kimlik, fazla senaryo) kodda; eksik senaryo ise modelden
+        # bir kez daha istenir (onarım çağrısı), çünkü eksik senaryoyu kod tamamlayamaz.
         fixed, notes = draftsvc.repair_generated(evalsvc.parse_json_output(text), policies, requested)
-        return draftsvc.GeneratedPart.model_validate(fixed), notes
+        part = draftsvc.GeneratedPart.model_validate(fixed)
+        if len(part.scenarios) < requested:
+            raise evalsvc.EvaluationShapeError(
+                f"scenarios: Tam olarak {requested} senaryo üretmelisin; "
+                f"{len(part.scenarios)} senaryo üretildi. Eksik senaryoları tamamla.")
+        return part, notes
 
     raw = model.chat(prompts.draft_messages(draft.form, policies), max_new_tokens=2000, temperature=1.0,
                      purpose="draft", stub_context=ctx)

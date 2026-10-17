@@ -43,3 +43,16 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 export function isApiError(error: unknown): error is ApiError {
   return error instanceof ApiError;
 }
+
+export async function allPages<T>(path: string): Promise<{ items: T[]; next_cursor: null }> {
+  const items: T[] = [];
+  let cursor: string | null = null;
+  do {
+    const page: { items: T[]; next_cursor: string | null } = await api(
+      `${path}${cursor ? `${path.includes("?") ? "&" : "?"}cursor=${encodeURIComponent(cursor)}` : ""}`,
+    );
+    items.push(...page.items);
+    cursor = page.next_cursor;
+  } while (cursor);
+  return { items, next_cursor: null };
+}

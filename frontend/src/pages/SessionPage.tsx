@@ -2,9 +2,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, isApiError } from "../api/client";
-import type { EvaluationEnvelope, Job, Session, TurnAccepted } from "../api/types";
+import type { EvaluationEnvelope, Job, Me, Session, TurnAccepted } from "../api/types";
 import { Clip } from "../components/Clip";
 import { ReportView } from "../components/ReportView";
+import { ReviewModal } from "../components/ReviewModal";
 import { evaluationLabel, formatClock, jobLabel, speakerLabel } from "../lib/labels";
 import { extensionFor, recordOnce, supportedMime } from "../lib/recorder";
 
@@ -20,15 +21,19 @@ export function SessionPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [shouldEnd, setShouldEnd] = useState(false);
-  const requestId = useRef<string | null>(null);
+  const requestId = useRef<{ id: string; text: string } | null>(null);
+  const [reviewOpen, setReviewOpen] = useState(false);
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const stopRecording = useRef<(() => void) | null>(null);
   const canRecord = typeof MediaRecorder !== "undefined" && Boolean(navigator.mediaDevices?.getUserMedia);
 
+  const me = useQuery({ queryKey: ["me"], queryFn: () => api<Me>("/me") });
+
   const sessionQuery = useQuery({
     queryKey: ["session", sessionId],
     queryFn: () => api<Session>(`/sessions/${sessionId}`),
+    refetchInterval: query => query.state.data?.status === "active" ? 3000 : false,
   });
   const session = sessionQuery.data;
   const liveJobId = session?.status === "active" ? session.pending_job_id : null;
@@ -64,7 +69,7 @@ export function SessionPage() {
   });
 
   const job = jobQuery.data;
-  const jobBusy = Boolean(job && ACTIVE.has(job.status));
+  const jobBusy = Boolean(liveJobId && (!job || ACTIVE.has(job.status)));
 
   useEffect(() => {
     if (job?.status !== "ready" && job?.status !== "error") return;
@@ -95,10 +100,10 @@ export function SessionPage() {
 
   async function sendMessage() {
     const text = draft.trim();
-    if (!text || sending) return;
+    if (!text || !canSend) return;
     setNotice(null);
-    const clientRequestId = requestId.current ?? crypto.randomUUID();
-    requestId.current = clientRequestId;
+    const clientRequestId = requestId.current?.text === text ? requestId.current.id : crypto.randomUUID();
+    requestId.current = { id: clientRequestId, text };
     setSending(true);
     try {
       await api<TurnAccepted>(`/sessions/${sessionId}/messages`, {
@@ -181,6 +186,20 @@ export function SessionPage() {
     }
   }
 
+  async function retryEvaluation() {
+    const id = evaluation.data?.evaluation_job_id;
+    if (!id) return;
+    setNotice(null);
+    try {
+      await api(`/jobs/${id}/retry`, { method: "POST" });
+      await queryClient.invalidateQueries({ queryKey: ["evaluation", sessionId] });
+      await queryClient.invalidateQueries({ queryKey: ["session", sessionId] });
+      await queryClient.invalidateQueries({ queryKey: ["job", id] });
+    } catch (error) {
+      setNotice(isApiError(error) ? error.message : "Değerlendirme yeniden başlatılamadı.");
+    }
+  }
+
   if (sessionQuery.isLoading) return <p className="text-muted">Yükleniyor…</p>;
   if (sessionQuery.isError || !session) {
     return (
@@ -191,9 +210,10 @@ export function SessionPage() {
   }
 
   const finished = session.status === "finished";
+  const isOwner = me.data?.user.id === session.employee.id;
   const evalStatus = evaluation.data?.status ?? session.evaluation_status;
   const atLimit = session.employee_turn_count >= session.max_turns;
-  const canSend = !finished && !atLimit && !sending && !jobBusy && !recording;
+  const canSend = isOwner && !finished && !atLimit && !sending && !jobBusy && !recording;
   const noSpeech = job?.status === "error" && job.error?.code === "no_speech";
 
   return (
@@ -208,10 +228,10 @@ export function SessionPage() {
           <h1 className="mt-2 font-serif text-3xl tracking-tight">{session.training.title}</h1>
           <p className="mt-1 text-sm text-muted">
             {session.employee_turn_count} / {session.max_turns} cevap
-            {finished && evalStatus ? ` · ${evaluationLabel[evalStatus]}` : ""}
+            {finished && evalStatus ? ` · ${session.review_status === "reviewed" ? "İncelendi" : evaluationLabel[evalStatus]}` : ""}
           </p>
         </div>
-        {!finished && (
+        {!finished && isOwner && (
           <button
             type="button"
             onClick={() => void finish()}
@@ -225,9 +245,40 @@ export function SessionPage() {
 
       {finished && (
         <div className="mt-8">
+          {me.data?.user.role === "manager" && evaluation.data?.report && (
+            <div className="mb-6 rounded-3xl border border-primary/30 bg-primary/5 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-ink text-base">Yönetici İnceleme Paneli</span>
+                  <span
+                    className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                      session.review_status === "reviewed"
+                        ? "bg-pine-soft text-pine"
+                        : "bg-warn-soft text-warn"
+                    }`}
+                  >
+                    {session.review_status === "reviewed" ? "✓ İncelendi" : session.review_status === "pending" ? "İnceleme Bekliyor" : "İnceleme İsteğe Bağlı"}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-muted">
+                  {session.review_status === "reviewed"
+                    ? "Bu oturum için inceleme tamamlandı. Karar ve puan düzeltmelerini güncelleyebilirsiniz."
+                    : "Model değerlendirmesini onaylayabilir veya boyut puanlarını gerekçeleriyle düzeltebilirsiniz."}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReviewOpen(true)}
+                className="rounded-full bg-primary px-5 py-2.5 text-xs font-semibold text-white hover:opacity-95 transition-opacity whitespace-nowrap self-start sm:self-center"
+              >
+                {session.review_status === "reviewed" ? "İncelemeyi Düzenle" : "İncele ve Onayla →"}
+              </button>
+            </div>
+          )}
+
           {evaluation.data?.report ? (
             <>
-              {evaluation.data.status === "needs_review" && (
+              {evaluation.data.status === "needs_review" && session.review_status !== "reviewed" && (
                 <p className="mb-4 text-sm text-warn">
                   Rapor çıktı ama bazı kanıtlar doğrulanamadı. Sonuç, yönetici bakmadan kesin sayılmıyor.
                 </p>
@@ -235,12 +286,15 @@ export function SessionPage() {
               <ReportView report={evaluation.data.report} />
             </>
           ) : evaluation.data?.status === "error" ? (
-            <p className="text-accent">{evaluation.data.error?.message ?? "Değerlendirme tamamlanamadı."}</p>
+            <div className="space-y-3"><p role="alert" className="text-accent">{evaluation.data.error?.message ?? "Değerlendirme tamamlanamadı."}</p>{evaluation.data.error?.retryable && <button type="button" onClick={() => void retryEvaluation()} className="rounded-full border border-line px-4 py-2 text-sm text-primary">Değerlendirmeyi tekrar dene</button>}</div>
           ) : (
             <p className="text-muted">{evalJob.data ? jobLabel[evalJob.data.status] : "Değerlendirme hazırlanıyor…"}</p>
           )}
         </div>
       )}
+
+      {finished && notice && <p role="alert" className="mt-4 text-accent">{notice}</p>}
+      {jobQuery.isError && <p role="alert" className="mt-4 text-accent">İş durumu alınamadı. <button type="button" className="underline" onClick={() => void jobQuery.refetch()}>Tekrar kontrol et</button></p>}
 
       <ol
         ref={thread}
@@ -255,7 +309,7 @@ export function SessionPage() {
               }`}
             >
               <p className={`text-xs ${turn.speaker === "employee" ? "text-paper/70" : "text-muted"}`}>
-                {speakerLabel[turn.speaker]}
+                {turn.speaker === "employee" && !isOwner ? session.employee.display_name : speakerLabel[turn.speaker]}
                 {turn.status === "processing" ? " · hazırlanıyor" : ""}
                 {turn.status === "error" ? " · işlenemedi" : ""}
               </p>
@@ -270,7 +324,7 @@ export function SessionPage() {
           </li>
         ))}
       </ol>
-      {!finished && (
+      {!finished && isOwner && (
         <form
           className="shrink-0 border-t border-line pt-3"
           onSubmit={(event) => {
@@ -342,6 +396,15 @@ export function SessionPage() {
             </div>
           </div>
         </form>
+      )}
+
+      {reviewOpen && evaluation.data?.report && (
+        <ReviewModal
+          open={reviewOpen}
+          onClose={() => setReviewOpen(false)}
+          sessionId={sessionId}
+          report={evaluation.data.report}
+        />
       )}
     </div>
   );

@@ -41,6 +41,9 @@ const flags: Record<string, string> = {
   unverified_evidence: "Bazı alıntılar transkriptte doğrulanamadı",
   short_session: "Görüşme puanlama için kısa kaldı",
   schema_repaired: "Rapor bir onarım adımından geçti",
+  dropped_evidence: "Bazı kanıtlar konuşmayla eşleştirilemediği için rapordan çıkarıldı",
+  score_without_verified_evidence: "Bazı puanlar için doğrulanmış konuşma kanıtı bulunamadı",
+  unknown_policy_ref: "Raporda işletme kurallarıyla eşleştirilemeyen bir politika atfı var",
 };
 
 export function flagLabel(flag: string) {

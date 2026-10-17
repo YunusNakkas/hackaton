@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { z } from "zod";
 import { api, isApiError } from "../api/client";
 import type { Me } from "../api/types";
+import { useTheme } from "../lib/theme";
 
 const schema = z.object({
   email: z.email("Geçerli bir e-posta girin"),
@@ -17,6 +18,7 @@ type FormValues = z.infer<typeof schema>;
 export function LoginPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { theme, toggleTheme } = useTheme();
   const [formError, setFormError] = useState<string | null>(null);
   const {
     register,
@@ -29,65 +31,140 @@ export function LoginPage() {
     try {
       const me = await api<Me>("/auth/login", { method: "POST", body: JSON.stringify(values) });
       queryClient.setQueryData(["me"], me);
-      navigate("/", { replace: true });
+      if (me.user.role === "manager") {
+        navigate("/admin", { replace: true });
+      } else {
+        navigate("/", { replace: true });
+      }
     } catch (error) {
       setFormError(isApiError(error) ? error.message : "Giriş yapılamadı.");
     }
   }
 
   return (
-    <div className="min-h-screen lg:grid lg:grid-cols-2">
-      <section className="hidden flex-col justify-between px-8 py-10 sm:px-14 lg:flex">
-        <p className="font-serif text-2xl">ProvaMüşteri</p>
-        <div className="max-w-md py-16">
-          <h1 className="font-serif text-5xl leading-[1.05] tracking-tight">
-            Müşteriyle konuş. Sonra neyin tuttuğunu gör.
-          </h1>
-          <p className="mt-5 max-w-sm text-lg text-muted">
-            İşletmenin kendi kurallarıyla sesli ya da yazılı prova. Kayıt sende kalır, puan görüşmeden çıkar.
-          </p>
-        </div>
-        <p className="text-sm text-muted">Türkçe · ses en fazla 30 saniye</p>
-      </section>
-
-      <section className="flex min-h-screen items-center bg-card px-8 py-12 sm:px-14">
-        <form onSubmit={handleSubmit(onSubmit)} className="w-full max-w-sm" noValidate>
-          <p className="font-serif text-2xl lg:hidden">ProvaMüşteri</p>
-          <h2 className="mt-8 font-serif text-3xl lg:mt-0">Giriş</h2>
-          <label className="mt-8 block text-sm text-muted" htmlFor="email">
-            E-posta
-          </label>
-          <input
-            id="email"
-            type="email"
-            autoComplete="username"
-            className="mt-1 w-full border-b border-line bg-transparent py-2 outline-none focus:border-ink"
-            {...register("email")}
-          />
-          {errors.email && <p className="mt-1 text-sm text-accent">{errors.email.message}</p>}
-
-          <label className="mt-6 block text-sm text-muted" htmlFor="password">
-            Şifre
-          </label>
-          <input
-            id="password"
-            type="password"
-            autoComplete="current-password"
-            className="mt-1 w-full border-b border-line bg-transparent py-2 outline-none focus:border-ink"
-            {...register("password")}
-          />
-          {errors.password && <p className="mt-1 text-sm text-accent">{errors.password.message}</p>}
-
-          {formError && <p className="mt-4 text-sm text-accent">{formError}</p>}
+    <div className="min-h-screen lg:grid lg:grid-cols-2 bg-paper text-ink transition-colors duration-200">
+      {/* Sol Panel: Hero Tanıtım */}
+      <section className="relative hidden flex-col justify-between p-12 lg:flex border-r border-line bg-gradient-to-b from-card-subtle/50 to-transparent">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="h-9 w-9 rounded-xl bg-gradient-to-tr from-primary to-sky-400 text-white flex items-center justify-center font-bold text-base shadow-sm">
+              P
+            </div>
+            <span className="font-serif text-2xl font-semibold tracking-tight text-ink">
+              ProvaMüşteri
+            </span>
+          </div>
 
           <button
-            type="submit"
-            disabled={isSubmitting}
-            className="mt-8 rounded-full bg-ink px-5 py-2.5 text-paper disabled:opacity-60"
+            type="button"
+            aria-label="Temayı değiştir"
+            onClick={toggleTheme}
+            title={theme === "dark" ? "Açık Tema (Çok Açık Mavi)" : "Karanlık Tema (Lacivert)"}
+            className="flex items-center justify-center h-9 w-9 rounded-full border border-line bg-card text-ink hover:border-primary/40 transition-colors"
           >
-            {isSubmitting ? "Giriliyor…" : "Giriş yap"}
+            {theme === "dark" ? "☀️" : "🌙"}
           </button>
-        </form>
+        </div>
+
+        <div className="max-w-lg py-12">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-xs font-semibold text-primary mb-6">
+            <span>✨</span>
+            <span>Yapay Zeka Destekli Müşteri Deneyimi</span>
+          </div>
+          <h1 className="font-serif text-5xl leading-[1.1] tracking-tight text-ink">
+            Müşteriyle konuş. Gerçek kurallarla provayı tamamla.
+          </h1>
+          <p className="mt-6 text-base text-muted leading-relaxed">
+            İşletmenizin iade, değişim, karşılama ve problem çözme standartlarıyla yazılı prova yapın. Model görüşmenizi puanlar ve yönetici denetler.
+          </p>
+
+          <div className="mt-8 grid grid-cols-2 gap-4">
+            <div className="rounded-2xl border border-line bg-card/60 p-4">
+              <p className="font-serif text-2xl font-bold text-primary">6 Farklı</p>
+              <p className="text-xs text-muted mt-1">Mağaza ve Otel Senaryosu</p>
+            </div>
+            <div className="rounded-2xl border border-line bg-card/60 p-4">
+              <p className="font-serif text-2xl font-bold text-pine">Yazılı Prova</p>
+              <p className="text-xs text-muted mt-1">Mesajla Yanıt</p>
+            </div>
+          </div>
+        </div>
+
+        <p className="text-xs text-muted">
+          Türkçe dil desteği · Gemma 4 Yapay Zeka Ölçüm Motoru
+        </p>
+      </section>
+
+      {/* Sağ Panel: Giriş Formu */}
+      <section className="flex min-h-screen items-center justify-center bg-card p-8 sm:p-14">
+        <div className="w-full max-w-sm">
+          <div className="flex items-center justify-between lg:hidden mb-8">
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-xl bg-primary text-white flex items-center justify-center font-bold text-sm">
+                P
+              </div>
+              <span className="font-serif text-xl font-semibold text-ink">ProvaMüşteri</span>
+            </div>
+            <button
+              type="button"
+              aria-label="Temayı değiştir"
+            onClick={toggleTheme}
+              className="flex items-center justify-center h-8 w-8 rounded-full border border-line bg-card-subtle text-ink"
+            >
+              {theme === "dark" ? "☀️" : "🌙"}
+            </button>
+          </div>
+
+          <h2 className="font-serif text-3xl font-semibold text-ink">Giriş Yap</h2>
+          <p className="mt-1 text-sm text-muted">Platforma erişmek için bilgilerinizi girin.</p>
+
+          <form onSubmit={handleSubmit(onSubmit)} className="mt-8 space-y-4" noValidate>
+            <div>
+              <label className="block text-xs font-semibold text-muted uppercase tracking-wider" htmlFor="email">
+                E-posta Adresi
+              </label>
+              <input
+                id="email"
+                type="email"
+                autoComplete="username"
+                className="mt-1.5 w-full rounded-2xl border border-line bg-card-subtle px-4 py-3 text-sm text-ink outline-none focus:border-primary transition-colors"
+                placeholder="ad@isletme.com"
+                {...register("email")}
+              />
+              {errors.email && <p className="mt-1 text-xs text-accent">{errors.email.message}</p>}
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-muted uppercase tracking-wider" htmlFor="password">
+                Şifre
+              </label>
+              <input
+                id="password"
+                type="password"
+                autoComplete="current-password"
+                className="mt-1.5 w-full rounded-2xl border border-line bg-card-subtle px-4 py-3 text-sm text-ink outline-none focus:border-primary transition-colors"
+                placeholder="••••••••"
+                {...register("password")}
+              />
+              {errors.password && <p className="mt-1 text-xs text-accent">{errors.password.message}</p>}
+            </div>
+
+            {formError && (
+              <div className="rounded-2xl border border-accent/20 bg-accent-soft/50 p-3 text-xs text-accent">
+                {formError}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="mt-4 w-full rounded-full bg-primary px-5 py-3 text-sm font-semibold text-white shadow-sm hover:opacity-95 disabled:opacity-50 transition-opacity"
+            >
+              {isSubmitting ? "Giriş yapılıyor…" : "Giriş Yap"}
+            </button>
+
+          </form>
+        </div>
       </section>
     </div>
   );

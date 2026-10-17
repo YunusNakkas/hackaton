@@ -16,6 +16,11 @@ function ScoreMarks({ score }: { score: number | null }) {
 
 export function ReportView({ report }: { report: EvaluationReport }) {
   const total = report.effective_total;
+  const adjustments = new Map(report.manager_review?.adjustments.map(a => [a.dimension_id, a]) ?? []);
+  const dimensions = report.dimensions.map(d => {
+    const adjustment = adjustments.get(d.dimension_id);
+    return adjustment ? { ...d, score: adjustment.score, insufficient_evidence: adjustment.score === null } : d;
+  });
   return (
     <section className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4 border-b border-line pb-5">
@@ -40,6 +45,8 @@ export function ReportView({ report }: { report: EvaluationReport }) {
         )}
       </div>
 
+      {report.manager_review && <div className="rounded-2xl border border-line bg-pine-soft p-4 text-sm"><p className="font-semibold text-pine">Yönetici incelemesi: {report.manager_review.decision === "approved" ? "Onaylandı" : "Puanlar düzeltildi"}</p><p className="mt-1 text-muted">{report.manager_review.reviewer.display_name} · {new Date(report.manager_review.created_at).toLocaleString("tr-TR")}</p>{report.manager_review.comment && <p className="mt-2 whitespace-pre-wrap">{report.manager_review.comment}</p>}</div>}
+
       {report.flags.length > 0 && (
         <ul className="space-y-1 text-sm text-warn">
           {report.flags.map((flag) => (
@@ -49,7 +56,7 @@ export function ReportView({ report }: { report: EvaluationReport }) {
       )}
 
       <div className="space-y-4">
-        {report.dimensions.map((dimension) => (
+        {dimensions.map((dimension) => (
           <article key={dimension.dimension_id} className="rounded-2xl border border-line bg-card p-4">
             <div className="flex items-center justify-between gap-4">
               <h3 className="font-medium">{dimension.name}</h3>
@@ -61,6 +68,7 @@ export function ReportView({ report }: { report: EvaluationReport }) {
               </div>
             </div>
             <p className="mt-2 text-muted">{dimension.rationale}</p>
+            {adjustments.has(dimension.dimension_id) && <p className="mt-2 rounded-xl bg-primary/10 p-3 text-sm"><strong>Yönetici düzeltmesi:</strong> Model puanı {adjustments.get(dimension.dimension_id)?.original_score ?? "—"} → {dimension.score ?? "Puan yok"}. {adjustments.get(dimension.dimension_id)?.reason}</p>}
             {dimension.evidence.length > 0 && (
               <ul className="mt-3 space-y-2">
                 {dimension.evidence.map((item) => (

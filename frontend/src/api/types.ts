@@ -184,6 +184,7 @@ export interface EvaluationReport {
   flags: string[];
   model_run: { model: string; runtime: string; repaired: boolean };
   effective_total: TotalScore;
+  manager_review?: Review | null;
 }
 
 export interface EvaluationEnvelope {
@@ -192,4 +193,133 @@ export interface EvaluationEnvelope {
   evaluation_job_id: string | null;
   report: EvaluationReport | null;
   error: JobError | null;
+}
+
+export interface AdminOverview {
+  active_employees: number;
+  open_assignments: number;
+  completed_assignments: number;
+  sessions_pending_review: number;
+  sessions_last_7_days: number;
+}
+
+export interface Employee {
+  id: string;
+  email: string;
+  display_name: string;
+  active: boolean;
+  created_at: string;
+  open_assignments: number;
+  completed_sessions: number;
+  last_session_at: string | null;
+}
+
+export interface EmployeePage {
+  items: Employee[];
+  next_cursor: string | null;
+}
+
+export interface SessionSummary {
+  id: string;
+  training: TrainingSummary;
+  employee: { id: string; display_name: string };
+  status: SessionStatus;
+  evaluation_status: EvaluationStatus | null;
+  review_status: ReviewStatus;
+  total: TotalScore | null;
+  employee_turn_count: number;
+  started_at: string;
+  finished_at: string | null;
+}
+
+export interface EmployeeDetail extends Employee {
+  assignments: Assignment[];
+  recent_sessions: SessionSummary[];
+}
+
+export interface SessionPage {
+  items: SessionSummary[];
+  next_cursor: string | null;
+}
+
+export interface DimensionAdjustment {
+  dimension_id: string;
+  score: number | null;
+  original_score?: number | null;
+  reason: string;
+}
+
+export interface Review {
+  id: string;
+  reviewer: { id: string; display_name: string };
+  decision: "approved" | "adjusted";
+  adjustments: DimensionAdjustment[];
+  comment: string;
+  created_at: string;
+}
+
+export interface CreateReviewRequest {
+  decision: "approved" | "adjusted";
+  adjustments: DimensionAdjustment[];
+  comment: string;
+}
+
+export interface CreateAssignmentsRequest {
+  training_id: string;
+  employee_ids: string[];
+  due_at?: string | null;
+}
+
+export interface CreateAssignmentsResponse {
+  created: Assignment[];
+  skipped_employee_ids: string[];
+}
+
+export interface CreateEmployeeRequest {
+  email: string;
+  display_name: string;
+  temporary_password: string;
+}
+
+export interface FormPolicy {
+  title: string;
+  body: string;
+}
+
+export interface BusinessRulesForm {
+  business_name: string;
+  sector: string;
+  language: "tr";
+  policies: FormPolicy[];
+  customer_situations: string[];
+  must_do: string[];
+  must_not_do: string[];
+  escalation_rule?: string | null;
+  scenario_count: number;
+}
+
+export interface TrainingDraft {
+  id: string;
+  status: "generating" | "ready" | "error" | "published";
+  version: number;
+  form: BusinessRulesForm;
+  content: {
+    scenarios: {
+      key: string; title: string; difficulty: Difficulty; summary: string;
+      customer: { name: string; context: string; mood: string; hidden_goal: string };
+      opening_line: string; success_criteria: string[]; visible_policy_ids: string[]; max_turns: number;
+    }[];
+    policies: { id: string; title: string; body: string }[];
+    rubric: { dimensions: { id: string; name: string; description: string; levels: string[]; weight: number }[] };
+  } | null;
+  generation_job_id: string | null;
+  warnings: string[];
+  created_at: string;
+  updated_at: string;
+  published_training_ids: string[];
+}
+
+export interface TrainingDraftPage {
+  items: TrainingDraft[];
+  next_cursor: string | null;
 }

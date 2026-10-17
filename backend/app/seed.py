@@ -49,6 +49,9 @@ def load_trainings(org_id: str) -> list[Training]:
 
 def seed(db: Session, password: str) -> Organization:
     org = db.query(Organization).filter_by(name=ORG_NAME).one_or_none()
+    if org is None:
+        # Önceki sürümün başlangıç verisini tekrar oluşturmaya çalışmayın.
+        org = db.query(Organization).filter_by(name="Demo İşletme").one_or_none()
     if org:
         return org
     org = Organization(name=ORG_NAME)
@@ -78,7 +81,7 @@ def main() -> None:
     with get_sessionmaker()() as db:
         org = seed(db, password)
         n = db.query(Training).filter_by(org_id=org.id).count()
-    print(f"seed tamam: {ORG_NAME}, {n} eğitim, kullanıcılar: {', '.join(u[0] for u in USERS)}")
+    print(f"seed tamam: {org.name}, {n} eğitim, kullanıcılar: {', '.join(u[0] for u in USERS)}")
 
 
 if __name__ == "__main__":
