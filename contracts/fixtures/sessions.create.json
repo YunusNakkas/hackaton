@@ -1,0 +1,44 @@
+{
+  "session": {
+    "id": "01JA000000000000000000SE01",
+    "training": {
+      "id": "01JA000000000000000000TR01",
+      "title": "Fişsiz iade talebi",
+      "sector": "retail",
+      "language": "tr",
+      "difficulty": "medium",
+      "summary": "Müşteri, fişini kaybettiği montu iade etmek istiyor ve sinirli.",
+      "estimated_minutes": 5,
+      "max_turns": 8
+    },
+    "employee": { "id": "01JA0000000000000000000E01", "display_name": "Elif Yılmaz" },
+    "assignment_id": "01JA000000000000000000AS01",
+    "status": "active",
+    "evaluation_status": null,
+    "review_status": "not_required",
+    "versions": {
+      "scenario_version": "retail.return_no_receipt@1",
+      "policy_version": "retail.policies@1",
+      "rubric_version": "retail.rubric@1",
+      "prompt_version": "customer@1"
+    },
+    "turns": [
+      {
+        "id": "01JA000000000000000000TN00",
+        "index": 0,
+        "speaker": "customer",
+        "status": "processing",
+        "text": "Merhaba, bu montu iade etmek istiyorum ama fişim yok. Kart ekstrem burada.",
+        "has_audio": false,
+        "duration_ms": null,
+        "created_at": "2026-10-17T10:00:00Z"
+      }
+    ],
+    "employee_turn_count": 0,
+    "max_turns": 8,
+    "pending_job_id": "01JA000000000000000000JB00",
+    "started_at": "2026-10-17T10:00:00Z",
+    "finished_at": null
+  },
+  "opening_job_id": "01JA000000000000000000JB00"
+}

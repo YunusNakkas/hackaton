@@ -1,0 +1,110 @@
+{
+  "session_id": "01JA000000000000000000SE01",
+  "status": "needs_review",
+  "evaluation_job_id": "01JA000000000000000000JB02",
+  "report": {
+    "rubric_version": "retail.rubric@1",
+    "dimensions": [
+      {
+        "dimension_id": "empathy",
+        "name": "Empati",
+        "score": 3,
+        "max_score": 4,
+        "insufficient_evidence": false,
+        "rationale": "Müşteriye adıyla hitap edip yardım teklif etti; sinirini açıkça kabul etmedi.",
+        "evidence": [
+          {
+            "turn_id": "01JA000000000000000000TN01",
+            "speaker": "employee",
+            "quote": "Merhaba Ayşe Hanım, yardımcı olayım.",
+            "verified": true
+          }
+        ],
+        "policy_refs": []
+      },
+      {
+        "dimension_id": "policy_accuracy",
+        "name": "Politika doğruluğu",
+        "score": 4,
+        "max_score": 4,
+        "insufficient_evidence": false,
+        "rationale": "Kartla ödemede kayıt bulunursa karta iade kuralını doğru aktardı.",
+        "evidence": [
+          {
+            "turn_id": "01JA000000000000000000TN03",
+            "speaker": "employee",
+            "quote": "Kartla ödenen alışverişlerde kayıt bulunursa iadeyi kartınıza yapabiliyoruz.",
+            "verified": true
+          }
+        ],
+        "policy_refs": [
+          {
+            "policy_id": "return_without_receipt",
+            "title": "Fişsiz iade",
+            "quote": "Kartlı ödemede POS kaydı bulunursa iade karta yapılır.",
+            "verified": true
+          }
+        ]
+      },
+      {
+        "dimension_id": "solution",
+        "name": "Çözüm odaklılık",
+        "score": 2,
+        "max_score": 4,
+        "insufficient_evidence": false,
+        "rationale": "Kayıt aramayı önerdi ancak süre ve sonraki adımı belirtmedi.",
+        "evidence": [
+          {
+            "turn_id": "01JA000000000000000000TN03",
+            "speaker": "employee",
+            "quote": "iadeyi hemen nakit olarak yapabiliriz",
+            "verified": false
+          }
+        ],
+        "policy_refs": []
+      },
+      {
+        "dimension_id": "clarity",
+        "name": "İletişim netliği",
+        "score": null,
+        "max_score": 4,
+        "insufficient_evidence": true,
+        "rationale": "Görüşme puanlama için çok kısa.",
+        "evidence": [],
+        "policy_refs": []
+      }
+    ],
+    "total": {
+      "score": null,
+      "max_score": 16,
+      "complete": false,
+      "scored_dimensions": 3,
+      "total_dimensions": 4
+    },
+    "strengths": ["Politikayı doğru aktardı.", "Kibar bir açılış yaptı."],
+    "improvements": ["Müşterinin duygusunu açıkça kabul edin.", "İadenin ne kadar süreceğini söyleyin."],
+    "practice_drill": {
+      "title": "Duyguyu kabul et, sonra çöz",
+      "instructions": "Aynı müşteriyle tekrar konuşun; ilk cümlenizde yaşadığı zorluğu kabul edin, ikinci cümlede somut süre verin.",
+      "focus_dimension_ids": ["empathy", "solution"],
+      "example_phrases": ["Fişi kaybetmek gerçekten can sıkıcı, hemen bakalım.", "Kayıt bulunursa iade 3 iş günü içinde kartınıza yansır."]
+    },
+    "flags": ["unverified_evidence", "short_session"],
+    "model_run": {
+      "model": "gemma-4-e4b-it",
+      "runtime": "stub",
+      "prompt_version": "evaluator@1",
+      "generated_at": "2026-10-17T10:03:10Z",
+      "repaired": false
+    },
+    "manager_review": null,
+    "effective_total": {
+      "score": null,
+      "max_score": 16,
+      "complete": false,
+      "scored_dimensions": 3,
+      "total_dimensions": 4
+    }
+  },
+  "error": null
+}

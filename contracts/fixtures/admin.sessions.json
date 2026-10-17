@@ -1,0 +1,32 @@
+{
+  "items": [
+    {
+      "id": "01JA000000000000000000SE01",
+      "training": {
+        "id": "01JA000000000000000000TR01",
+        "title": "Fişsiz iade talebi",
+        "sector": "retail",
+        "language": "tr",
+        "difficulty": "medium",
+        "summary": "Müşteri, fişini kaybettiği montu iade etmek istiyor ve sinirli.",
+        "estimated_minutes": 5,
+        "max_turns": 8
+      },
+      "employee": { "id": "01JA0000000000000000000E01", "display_name": "Elif Yılmaz" },
+      "status": "finished",
+      "evaluation_status": "needs_review",
+      "review_status": "pending",
+      "total": {
+        "score": null,
+        "max_score": 16,
+        "complete": false,
+        "scored_dimensions": 3,
+        "total_dimensions": 4
+      },
+      "employee_turn_count": 2,
+      "started_at": "2026-10-17T10:00:00Z",
+      "finished_at": "2026-10-17T10:02:30Z"
+    }
+  ],
+  "next_cursor": null
+}

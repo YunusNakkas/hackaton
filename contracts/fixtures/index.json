@@ -1,0 +1,23 @@
+{
+  "$comment": "Fixture dosyası -> doğrulandığı şema. contracts/scripts/validate_fixtures.py bu eşlemeyi kullanır. MSW handler'ları da aynı dosyaları döndürür.",
+  "me.employee.json": "Me",
+  "me.manager.json": "Me",
+  "trainings.list.json": "TrainingPage",
+  "trainings.detail.json": "TrainingDetail",
+  "assignments.list.json": "AssignmentPage",
+  "sessions.create.json": "CreateSessionResponse",
+  "sessions.active.json": "Session",
+  "turns.accepted.json": "TurnAccepted",
+  "jobs.turn.transcribing.json": "Job",
+  "jobs.turn.ready.json": "Job",
+  "jobs.turn.error.json": "Job",
+  "sessions.finish.json": "FinishAccepted",
+  "evaluation.pending.json": "EvaluationEnvelope",
+  "evaluation.needs_review.json": "EvaluationEnvelope",
+  "admin.overview.json": "AdminOverview",
+  "admin.employees.json": "EmployeePage",
+  "admin.sessions.json": "SessionSummaryPage",
+  "admin.review.created.json": "ManagerReview",
+  "errors.turn_in_progress.json": "Error",
+  "errors.validation.json": "Error"
+}

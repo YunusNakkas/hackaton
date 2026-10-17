@@ -1,0 +1,28 @@
+# Web/API/worker. Gerçek model servisi GPU'ya bağlı olduğundan host üzerinde ayrı çalışır
+# (PM_MODEL_SERVICE_URL=http://host.docker.internal:8100); varsayılan profil stub kullanır.
+services:
+  api:
+    build: ./backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    env_file: .env
+    environment:
+      PM_MODEL_SERVICE_URL: ${PM_MODEL_SERVICE_URL:-http://model-stub:8100}
+    ports: ["8000:8000"]
+    volumes: ["pm-var:/app/var"]
+
+  worker:
+    build: ./backend
+    command: python -m app.worker
+    env_file: .env
+    environment:
+      PM_MODEL_SERVICE_URL: ${PM_MODEL_SERVICE_URL:-http://model-stub:8100}
+    volumes: ["pm-var:/app/var"]
+    depends_on: [api]
+
+  model-stub:
+    build: ./model-service
+    command: uvicorn stub.app:app --host 0.0.0.0 --port 8100
+    profiles: [stub]
+
+volumes:
+  pm-var:

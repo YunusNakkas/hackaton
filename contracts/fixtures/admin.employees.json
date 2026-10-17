@@ -1,0 +1,25 @@
+{
+  "items": [
+    {
+      "id": "01JA0000000000000000000E01",
+      "email": "elif@demo-magaza.test",
+      "display_name": "Elif Yılmaz",
+      "active": true,
+      "created_at": "2026-10-01T08:00:00Z",
+      "open_assignments": 1,
+      "completed_sessions": 4,
+      "last_session_at": "2026-10-17T10:00:00Z"
+    },
+    {
+      "id": "01JA0000000000000000000E02",
+      "email": "can@demo-magaza.test",
+      "display_name": "Can Arslan",
+      "active": true,
+      "created_at": "2026-10-01T08:05:00Z",
+      "open_assignments": 2,
+      "completed_sessions": 0,
+      "last_session_at": null
+    }
+  ],
+  "next_cursor": "eyJpZCI6IjAxSkEwMDAwMDAwMDAwMDAwMDAwMDAwMEUwMiJ9"
+}

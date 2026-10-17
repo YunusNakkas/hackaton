@@ -1,0 +1,1636 @@
+openapi: 3.1.0
+info:
+  title: ProvaMüşteri API
+  version: 0.1.0
+  description: |
+    Sesli müşteri provası ve yönetici inceleme platformu. Bu dosya frontend ile backend
+    arasındaki tek otoritedir; değişiklikler `contracts/README.md` kurallarına göre yapılır.
+
+    ## Kimlik doğrulama
+    `POST /auth/login` başarılı olunca `pm_session` adında httpOnly, SameSite=Lax bir
+    cookie döner. Sonraki bütün istekler bu cookie ile yapılır (`credentials: "include"`).
+    Bearer token kullanılmaz; böylece `<audio src>` ile ses dosyaları da yetkili çalınır.
+
+    ## CSRF
+    Durum değiştiren her istek (POST/PATCH/DELETE) `X-Requested-With: provamusteri`
+    başlığını taşımalıdır. Başlık yoksa 403 `csrf_header_missing` döner.
+
+    ## Uzun işler
+    Model çağrısı içeren işlemler 202 ve `job_id` döner. İstemci `GET /jobs/{jobId}`
+    uç noktasını `poll_after_ms` aralığıyla `ready` veya `error` olana kadar yoklar.
+    `uploading` durumu yalnızca istemci tarafındadır: sunucu 202 döndüğünde yükleme bitmiştir.
+
+    ## Sayfalama
+    Liste uçları `cursor` + `limit` alır ve `{items, next_cursor}` döner.
+    `next_cursor` null ise son sayfadır.
+servers:
+  - url: /api/v1
+security:
+  - sessionCookie: []
+tags:
+  - name: system
+  - name: auth
+  - name: employee
+    description: Çalışan akışı (yöneticiler de erişebilir)
+  - name: sessions
+  - name: jobs
+  - name: admin
+    description: Yalnızca `manager` rolü
+
+paths:
+  /health:
+    get:
+      tags: [system]
+      operationId: getHealth
+      security: []
+      responses:
+        "200":
+          description: Servis ayakta
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+
+  # ---------------------------------------------------------------- auth
+  /auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200":
+          description: Giriş başarılı, `pm_session` cookie set edilir
+          headers:
+            Set-Cookie:
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Me" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "204": { description: "Oturum kapatıldı, cookie silinir" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /me:
+    get:
+      tags: [auth]
+      operationId: getMe
+      responses:
+        "200":
+          description: Aktif kullanıcı
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Me" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  # ---------------------------------------------------------------- employee
+  /trainings:
+    get:
+      tags: [employee]
+      operationId: listTrainings
+      description: Kullanıcının başlatabileceği yayımlanmış eğitimler.
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+        - name: sector
+          in: query
+          schema: { $ref: "#/components/schemas/Sector" }
+      responses:
+        "200":
+          description: Eğitim listesi
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TrainingPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /trainings/{trainingId}:
+    get:
+      tags: [employee]
+      operationId: getTraining
+      parameters:
+        - $ref: "#/components/parameters/TrainingId"
+      responses:
+        "200":
+          description: Eğitim detayı (gizli persona hedefleri hariç)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TrainingDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /assignments:
+    get:
+      tags: [employee]
+      operationId: listMyAssignments
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+        - name: status
+          in: query
+          schema: { $ref: "#/components/schemas/AssignmentStatus" }
+      responses:
+        "200":
+          description: Kullanıcıya atanmış eğitimler
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AssignmentPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  # ---------------------------------------------------------------- sessions
+  /sessions:
+    post:
+      tags: [sessions]
+      operationId: createSession
+      description: |
+        Senaryo, politika, rubrik ve prompt sürümlerini sabitleyerek prova başlatır.
+        Müşteri ilk konuşur: açılış cümlesinin sesi `opening_job_id` ile üretilir.
+        Aynı `client_request_id` tekrar gönderilirse aynı oturum 200 ile döner.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateSessionRequest" }
+      responses:
+        "201":
+          description: Oturum oluşturuldu
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreateSessionResponse" }
+        "200":
+          description: Aynı client_request_id ile önceden oluşturulmuş oturum
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreateSessionResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /sessions/{sessionId}:
+    get:
+      tags: [sessions]
+      operationId: getSession
+      description: Oturum sahibi çalışan veya yönetici erişebilir.
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          description: Oturum ve transkript
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /sessions/{sessionId}/turns:
+    post:
+      tags: [sessions]
+      operationId: submitTurn
+      description: |
+        Çalışanın kaydettiği sesi yükler. Sunucu sesi doğrular, kaydeder ve
+        ASR → müşteri cevabı → TTS işini kuyruğa alır.
+
+        - Aynı anda oturum başına yalnızca bir işlenen tur olabilir (aksi 409 `turn_in_progress`).
+        - Aynı `client_request_id` tekrar gönderilirse aynı `job_id` döner (ses tekrar işlenmez).
+        - Limitler: en fazla 10 MB ve 60 sn; en az 0,5 sn.
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: "#/components/schemas/SubmitTurnForm" }
+            encoding:
+              audio:
+                contentType: audio/webm, audio/ogg, audio/mp4, audio/wav, audio/mpeg
+      responses:
+        "202":
+          description: Tur kabul edildi, iş kuyrukta
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TurnAccepted" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /sessions/{sessionId}/turns/{turnId}/audio:
+    get:
+      tags: [sessions]
+      operationId: getTurnAudio
+      description: |
+        Turun ses dosyası. Çalışan turu için orijinal kayıt, müşteri turu için TTS çıktısı.
+        `Range` başlığını destekler (206).
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - $ref: "#/components/parameters/TurnId"
+      responses:
+        "200":
+          description: Ses dosyası
+          content:
+            audio/mpeg: { schema: { type: string, format: binary } }
+            audio/webm: { schema: { type: string, format: binary } }
+            audio/ogg: { schema: { type: string, format: binary } }
+            audio/mp4: { schema: { type: string, format: binary } }
+            audio/wav: { schema: { type: string, format: binary } }
+        "206": { description: Kısmi içerik (Range) }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /sessions/{sessionId}/finish:
+    post:
+      tags: [sessions]
+      operationId: finishSession
+      description: |
+        Yeni tur kabulünü kapatır ve değerlendirme işini oluşturur. İdempotenttir:
+        tekrar çağrılırsa aynı `evaluation_job_id` döner. İşlenmekte olan tur varsa 409.
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "202":
+          description: Değerlendirme kuyrukta
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FinishAccepted" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /sessions/{sessionId}/evaluation:
+    get:
+      tags: [sessions]
+      operationId: getEvaluation
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          description: Değerlendirme durumu ve (hazırsa) rapor
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EvaluationEnvelope" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  # ---------------------------------------------------------------- jobs
+  /jobs/{jobId}:
+    get:
+      tags: [jobs]
+      operationId: getJob
+      parameters:
+        - $ref: "#/components/parameters/JobId"
+      responses:
+        "200":
+          description: İş durumu
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Job" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /jobs/{jobId}/retry:
+    post:
+      tags: [jobs]
+      operationId: retryJob
+      description: |
+        `error.retryable=true` olan işi kayıtlı girdiyle (ses yeniden yüklenmeden) tekrar
+        kuyruğa alır. Aynı `job_id` döner, `attempt` artar.
+      parameters:
+        - $ref: "#/components/parameters/JobId"
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "202":
+          description: Tekrar kuyruğa alındı
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Job" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  # ---------------------------------------------------------------- admin
+  /admin/overview:
+    get:
+      tags: [admin]
+      operationId: getAdminOverview
+      responses:
+        "200":
+          description: Dashboard özeti; sayılar backend'de hesaplanır
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminOverview" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /admin/employees:
+    get:
+      tags: [admin]
+      operationId: listEmployees
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+        - name: q
+          in: query
+          description: Ad veya e-posta araması
+          schema: { type: string, maxLength: 100 }
+        - name: active
+          in: query
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: Çalışan listesi
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EmployeePage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [admin]
+      operationId: createEmployee
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateEmployeeRequest" }
+      responses:
+        "201":
+          description: Çalışan oluşturuldu
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Employee" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /admin/employees/{employeeId}:
+    get:
+      tags: [admin]
+      operationId: getEmployee
+      parameters:
+        - $ref: "#/components/parameters/EmployeeId"
+      responses:
+        "200":
+          description: Çalışan detayı
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EmployeeDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/employees/{employeeId}/deactivate:
+    post:
+      tags: [admin]
+      operationId: deactivateEmployee
+      description: Çalışanı pasifleştirir; oturum ve kayıtları silinmez. İdempotent.
+      parameters:
+        - $ref: "#/components/parameters/EmployeeId"
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: Pasifleştirildi
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Employee" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/sessions:
+    get:
+      tags: [admin]
+      operationId: listAdminSessions
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+        - name: employee_id
+          in: query
+          schema: { $ref: "#/components/schemas/Id" }
+        - name: training_id
+          in: query
+          schema: { $ref: "#/components/schemas/Id" }
+        - name: evaluation_status
+          in: query
+          schema: { $ref: "#/components/schemas/EvaluationStatus" }
+        - name: review_status
+          in: query
+          schema: { $ref: "#/components/schemas/ReviewStatus" }
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        "200":
+          description: Filtrelenmiş oturumlar (yeniden eskiye)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SessionSummaryPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /admin/sessions/{sessionId}/reviews:
+    post:
+      tags: [admin]
+      operationId: createReview
+      description: |
+        Yöneticinin değerlendirmesi. Model raporu değiştirilmez; düzeltmeler ayrı kayıt
+        olarak tutulur ve `EvaluationReport.manager_review` içinde en son inceleme gösterilir.
+        Değerlendirme `ready` veya `needs_review` değilse 409.
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateReviewRequest" }
+      responses:
+        "201":
+          description: İnceleme kaydedildi
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ManagerReview" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /admin/assignments:
+    post:
+      tags: [admin]
+      operationId: createAssignments
+      description: Bir eğitimi bir veya daha fazla çalışana atar. Zaten açık ataması olan çalışan atlanır.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateAssignmentsRequest" }
+      responses:
+        "201":
+          description: Oluşturulan atamalar
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreateAssignmentsResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /admin/training-drafts:
+    get:
+      tags: [admin]
+      operationId: listTrainingDrafts
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+        - name: status
+          in: query
+          schema: { $ref: "#/components/schemas/DraftStatus" }
+      responses:
+        "200":
+          description: Taslaklar
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TrainingDraftPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [admin]
+      operationId: createTrainingDraft
+      description: |
+        Yapılandırılmış işletme kuralı formundan Gemma ile senaryo/politika/rubrik taslağı
+        üretir. 202 döner; `generation_job_id` yoklanır, bitince taslak `ready` olur.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateTrainingDraftRequest" }
+      responses:
+        "202":
+          description: Taslak oluşturuldu, üretim kuyrukta
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TrainingDraft" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /admin/training-drafts/{draftId}:
+    get:
+      tags: [admin]
+      operationId: getTrainingDraft
+      parameters:
+        - $ref: "#/components/parameters/DraftId"
+      responses:
+        "200":
+          description: Taslak
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TrainingDraft" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [admin]
+      operationId: updateTrainingDraft
+      description: |
+        Yöneticinin taslak içeriğini düzenlemesi. `content` tamamen değiştirilir (kısmi
+        birleştirme yapılmaz). `version` iyimser kilit içindir; uyuşmazsa 409.
+        Yalnızca `ready` durumundaki taslak düzenlenebilir.
+      parameters:
+        - $ref: "#/components/parameters/DraftId"
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateTrainingDraftRequest" }
+      responses:
+        "200":
+          description: Güncellendi
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TrainingDraft" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /admin/training-drafts/{draftId}/publish:
+    post:
+      tags: [admin]
+      operationId: publishTrainingDraft
+      description: Onaylanan taslağı yeni sürümlü eğitimler olarak yayımlar. İdempotent.
+      parameters:
+        - $ref: "#/components/parameters/DraftId"
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PublishDraftRequest" }
+      responses:
+        "200":
+          description: Yayımlandı
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublishDraftResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: pm_session
+
+  parameters:
+    CsrfHeader:
+      name: X-Requested-With
+      in: header
+      required: true
+      schema: { type: string, const: provamusteri }
+    Cursor:
+      name: cursor
+      in: query
+      schema: { type: string }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    TrainingId:
+      name: trainingId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/Id" }
+    SessionId:
+      name: sessionId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/Id" }
+    TurnId:
+      name: turnId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/Id" }
+    JobId:
+      name: jobId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/Id" }
+    EmployeeId:
+      name: employeeId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/Id" }
+    DraftId:
+      name: draftId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/Id" }
+
+  responses:
+    Unauthorized:
+      description: Oturum yok veya süresi dolmuş
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: Rol yetkisi yok veya CSRF başlığı eksik
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: Kaynak yok (veya kullanıcıya görünmez)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Conflict:
+      description: Durum çakışması (ör. işlenen tur var, oturum kapalı, sürüm uyuşmazlığı)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    PayloadTooLarge:
+      description: Ses dosyası limiti aşıldı
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    UnsupportedMediaType:
+      description: Desteklenmeyen ses formatı
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ValidationError:
+      description: Girdi doğrulama hatası; `details.fields` alan bazlı mesajları taşır
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    RateLimited:
+      description: Çok fazla deneme
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    # ------------------------------------------------------------ ortak
+    Id:
+      type: string
+      description: Opak kimlik (ULID). İstemci içeriğini yorumlamaz.
+      pattern: "^[0-9A-HJKMNP-TV-Z]{26}$"
+      examples: ["01JABCDEFGHJKMNPQRSTVWXYZ0"]
+    Timestamp:
+      type: string
+      format: date-time
+    Sector:
+      type: string
+      description: Serbest sektör anahtarı; demo paketleri `retail` ve `hotel`.
+      pattern: "^[a-z][a-z0-9_]{1,31}$"
+      examples: [retail, hotel]
+    Language:
+      type: string
+      enum: [tr]
+      description: P0 yalnız Türkçe; İngilizce P1.
+    Difficulty:
+      type: string
+      enum: [easy, medium, hard]
+    Score:
+      description: 0–4 puan; kanıt yetersizse null.
+      oneOf:
+        - { type: integer, minimum: 0, maximum: 4 }
+        - { type: "null" }
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, request_id]
+          properties:
+            code: { $ref: "#/components/schemas/ErrorCode" }
+            message:
+              type: string
+              description: Kullanıcıya gösterilebilir Türkçe mesaj; iç detay içermez.
+            request_id: { type: string }
+            details:
+              type: object
+              additionalProperties: true
+              properties:
+                fields:
+                  type: object
+                  description: Alan adı → hata mesajı
+                  additionalProperties: { type: string }
+    ErrorCode:
+      type: string
+      enum:
+        - unauthorized
+        - invalid_credentials
+        - forbidden
+        - csrf_header_missing
+        - not_found
+        - conflict
+        - turn_in_progress
+        - session_not_active
+        - evaluation_not_ready
+        - version_mismatch
+        - email_taken
+        - job_not_retryable
+        - payload_too_large
+        - unsupported_media_type
+        - audio_too_short
+        - audio_too_long
+        - audio_undecodable
+        - validation_error
+        - rate_limited
+        - model_unavailable
+        - internal_error
+
+    Health:
+      type: object
+      required: [status, version, model_service]
+      properties:
+        status: { type: string, enum: [ok, degraded] }
+        version: { type: string }
+        model_service:
+          type: string
+          enum: [up, down, stub]
+          description: "`stub` ise cevaplar gerçek model değildir; UI bunu göstermelidir."
+        tts_provider:
+          type: [string, "null"]
+          description: Bulut sağlayıcıysa metnin dışarı gittiği UI'da belirtilir.
+
+    # ------------------------------------------------------------ auth
+    Role:
+      type: string
+      enum: [employee, manager]
+    LoginRequest:
+      type: object
+      required: [email, password]
+      additionalProperties: false
+      properties:
+        email: { type: string, format: email, maxLength: 254 }
+        password: { type: string, minLength: 1, maxLength: 200 }
+    User:
+      type: object
+      required: [id, email, display_name, role, active]
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        email: { type: string, format: email }
+        display_name: { type: string }
+        role: { $ref: "#/components/schemas/Role" }
+        active: { type: boolean }
+    Organization:
+      type: object
+      required: [id, name]
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        name: { type: string }
+    Me:
+      type: object
+      required: [user, organization]
+      properties:
+        user: { $ref: "#/components/schemas/User" }
+        organization: { $ref: "#/components/schemas/Organization" }
+
+    # ------------------------------------------------------------ eğitim
+    RubricDimensionPublic:
+      type: object
+      required: [id, name, description]
+      properties:
+        id: { type: string, pattern: "^[a-z][a-z0-9_]{1,47}$" }
+        name: { type: string }
+        description: { type: string }
+    TrainingSummary:
+      type: object
+      required: [id, title, sector, language, difficulty, summary, estimated_minutes, max_turns]
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        title: { type: string }
+        sector: { $ref: "#/components/schemas/Sector" }
+        language: { $ref: "#/components/schemas/Language" }
+        difficulty: { $ref: "#/components/schemas/Difficulty" }
+        summary:
+          type: string
+          description: Çalışana gösterilen kısa durum özeti.
+        estimated_minutes: { type: integer, minimum: 1 }
+        max_turns:
+          type: integer
+          minimum: 1
+          description: Çalışan turu üst sınırı.
+    TrainingDetail:
+      allOf:
+        - $ref: "#/components/schemas/TrainingSummary"
+        - type: object
+          required: [customer, rubric_dimensions, version]
+          properties:
+            customer:
+              type: object
+              description: Yalnızca çalışanın bilmesi uygun bilgi; gizli hedefler yok.
+              required: [name, context]
+              properties:
+                name: { type: string }
+                context: { type: string }
+            rubric_dimensions:
+              type: array
+              items: { $ref: "#/components/schemas/RubricDimensionPublic" }
+            version: { $ref: "#/components/schemas/PinnedVersions" }
+    TrainingPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/TrainingSummary" }
+        next_cursor: { type: [string, "null"] }
+
+    AssignmentStatus:
+      type: string
+      enum: [assigned, in_progress, completed]
+    Assignment:
+      type: object
+      required: [id, training, employee_id, status, assigned_at, due_at, completed_session_id]
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        training: { $ref: "#/components/schemas/TrainingSummary" }
+        employee_id: { $ref: "#/components/schemas/Id" }
+        status: { $ref: "#/components/schemas/AssignmentStatus" }
+        assigned_at: { $ref: "#/components/schemas/Timestamp" }
+        due_at:
+          oneOf:
+            - { $ref: "#/components/schemas/Timestamp" }
+            - { type: "null" }
+        completed_session_id:
+          oneOf:
+            - { $ref: "#/components/schemas/Id" }
+            - { type: "null" }
+    AssignmentPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Assignment" }
+        next_cursor: { type: [string, "null"] }
+
+    # ------------------------------------------------------------ oturum
+    PinnedVersions:
+      type: object
+      description: Oturum başında sabitlenen sürümler; sonradan değişmez.
+      required: [scenario_version, policy_version, rubric_version, prompt_version]
+      properties:
+        scenario_version: { type: string }
+        policy_version: { type: string }
+        rubric_version: { type: string }
+        prompt_version: { type: string }
+    CreateSessionRequest:
+      type: object
+      required: [training_id, client_request_id]
+      additionalProperties: false
+      properties:
+        training_id: { $ref: "#/components/schemas/Id" }
+        assignment_id:
+          oneOf:
+            - { $ref: "#/components/schemas/Id" }
+            - { type: "null" }
+        client_request_id: { type: string, format: uuid }
+    CreateSessionResponse:
+      type: object
+      required: [session, opening_job_id]
+      properties:
+        session: { $ref: "#/components/schemas/Session" }
+        opening_job_id:
+          description: Müşterinin açılış cümlesi için TTS işi; ses gerekmiyorsa null.
+          oneOf:
+            - { $ref: "#/components/schemas/Id" }
+            - { type: "null" }
+    SessionStatus:
+      type: string
+      enum: [active, finished]
+      description: "`finished` sonrası yeni tur kabul edilmez."
+    Speaker:
+      type: string
+      enum: [employee, customer]
+    TurnStatus:
+      type: string
+      enum: [processing, ready, error]
+    Turn:
+      type: object
+      required: [id, index, speaker, status, text, has_audio, duration_ms, created_at]
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        index:
+          type: integer
+          minimum: 0
+          description: Oturumdaki sıra; 0 müşterinin açılışıdır.
+        speaker: { $ref: "#/components/schemas/Speaker" }
+        status: { $ref: "#/components/schemas/TurnStatus" }
+        text:
+          type: [string, "null"]
+          description: Çalışan için ASR transkripti, müşteri için model cevabı. İşlenirken null.
+        has_audio:
+          type: boolean
+          description: true ise `/sessions/{id}/turns/{turnId}/audio` çalınabilir.
+        duration_ms: { type: [integer, "null"], minimum: 0 }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+    Session:
+      type: object
+      required:
+        - id
+        - training
+        - employee
+        - assignment_id
+        - status
+        - evaluation_status
+        - review_status
+        - versions
+        - turns
+        - employee_turn_count
+        - max_turns
+        - pending_job_id
+        - started_at
+        - finished_at
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        training: { $ref: "#/components/schemas/TrainingSummary" }
+        employee:
+          type: object
+          required: [id, display_name]
+          properties:
+            id: { $ref: "#/components/schemas/Id" }
+            display_name: { type: string }
+        assignment_id:
+          oneOf:
+            - { $ref: "#/components/schemas/Id" }
+            - { type: "null" }
+        status: { $ref: "#/components/schemas/SessionStatus" }
+        evaluation_status:
+          oneOf:
+            - { $ref: "#/components/schemas/EvaluationStatus" }
+            - { type: "null" }
+          description: Oturum bitmeden null.
+        review_status: { $ref: "#/components/schemas/ReviewStatus" }
+        versions: { $ref: "#/components/schemas/PinnedVersions" }
+        turns:
+          type: array
+          items: { $ref: "#/components/schemas/Turn" }
+        employee_turn_count: { type: integer, minimum: 0 }
+        max_turns: { type: integer, minimum: 1 }
+        pending_job_id:
+          description: İşlenmekte olan tur/açılış işi; sayfa yenilenince yoklamaya devam etmek için.
+          oneOf:
+            - { $ref: "#/components/schemas/Id" }
+            - { type: "null" }
+        started_at: { $ref: "#/components/schemas/Timestamp" }
+        finished_at:
+          oneOf:
+            - { $ref: "#/components/schemas/Timestamp" }
+            - { type: "null" }
+    SubmitTurnForm:
+      type: object
+      required: [audio, client_request_id]
+      properties:
+        audio:
+          type: string
+          format: binary
+          description: Tarayıcı kaydı. Sunucu MIME türünü içerikten doğrular.
+        client_request_id: { type: string, format: uuid }
+        client_duration_ms:
+          type: integer
+          minimum: 0
+          description: İstemcinin ölçtüğü süre; yalnız teşhis içindir, sunucu kendi ölçer.
+    TurnAccepted:
+      type: object
+      required: [job_id, employee_turn_id]
+      properties:
+        job_id: { $ref: "#/components/schemas/Id" }
+        employee_turn_id: { $ref: "#/components/schemas/Id" }
+    FinishAccepted:
+      type: object
+      required: [session_id, evaluation_job_id]
+      properties:
+        session_id: { $ref: "#/components/schemas/Id" }
+        evaluation_job_id: { $ref: "#/components/schemas/Id" }
+    SessionSummary:
+      type: object
+      required:
+        - id
+        - training
+        - employee
+        - status
+        - evaluation_status
+        - review_status
+        - total
+        - employee_turn_count
+        - started_at
+        - finished_at
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        training: { $ref: "#/components/schemas/TrainingSummary" }
+        employee:
+          type: object
+          required: [id, display_name]
+          properties:
+            id: { $ref: "#/components/schemas/Id" }
+            display_name: { type: string }
+        status: { $ref: "#/components/schemas/SessionStatus" }
+        evaluation_status:
+          oneOf:
+            - { $ref: "#/components/schemas/EvaluationStatus" }
+            - { type: "null" }
+        review_status: { $ref: "#/components/schemas/ReviewStatus" }
+        total:
+          description: Geçerli (inceleme varsa düzeltilmiş) toplam; rapor yoksa null.
+          oneOf:
+            - { $ref: "#/components/schemas/TotalScore" }
+            - { type: "null" }
+        employee_turn_count: { type: integer, minimum: 0 }
+        started_at: { $ref: "#/components/schemas/Timestamp" }
+        finished_at:
+          oneOf:
+            - { $ref: "#/components/schemas/Timestamp" }
+            - { type: "null" }
+    SessionSummaryPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/SessionSummary" }
+        next_cursor: { type: [string, "null"] }
+
+    # ------------------------------------------------------------ iş
+    JobKind:
+      type: string
+      enum: [opening, turn, evaluation, draft_generation]
+    JobStatus:
+      type: string
+      enum: [queued, transcribing, generating, synthesizing, evaluating, ready, error]
+      description: |
+        opening: queued → synthesizing → ready
+        turn: queued → transcribing → generating → synthesizing → ready
+        evaluation: queued → evaluating → ready
+        draft_generation: queued → generating → ready
+    Job:
+      type: object
+      required: [id, kind, status, attempt, poll_after_ms, created_at, updated_at, result, error]
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        kind: { $ref: "#/components/schemas/JobKind" }
+        status: { $ref: "#/components/schemas/JobStatus" }
+        attempt: { type: integer, minimum: 1 }
+        poll_after_ms:
+          type: integer
+          minimum: 250
+          description: İstemcinin bir sonraki yoklama için beklemesi gereken süre.
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+        result:
+          description: Yalnız `ready` iken dolu.
+          oneOf:
+            - { $ref: "#/components/schemas/TurnJobResult" }
+            - { $ref: "#/components/schemas/OpeningJobResult" }
+            - { $ref: "#/components/schemas/EvaluationJobResult" }
+            - { $ref: "#/components/schemas/DraftJobResult" }
+            - { type: "null" }
+        error:
+          description: Yalnız `error` iken dolu.
+          oneOf:
+            - { $ref: "#/components/schemas/JobError" }
+            - { type: "null" }
+    JobError:
+      type: object
+      required: [code, message, retryable]
+      properties:
+        code: { $ref: "#/components/schemas/ErrorCode" }
+        message: { type: string }
+        retryable: { type: boolean }
+        failed_stage:
+          oneOf:
+            - { $ref: "#/components/schemas/JobStatus" }
+            - { type: "null" }
+    TurnJobResult:
+      type: object
+      required: [kind, employee_turn, customer_turn, session_should_end]
+      properties:
+        kind: { type: string, const: turn }
+        employee_turn: { $ref: "#/components/schemas/Turn" }
+        customer_turn: { $ref: "#/components/schemas/Turn" }
+        session_should_end:
+          type: boolean
+          description: Müşteri konuşmayı bitirdi veya tur sınırına ulaşıldı; UI bitir butonunu öne çıkarır.
+    OpeningJobResult:
+      type: object
+      required: [kind, customer_turn]
+      properties:
+        kind: { type: string, const: opening }
+        customer_turn: { $ref: "#/components/schemas/Turn" }
+    EvaluationJobResult:
+      type: object
+      required: [kind, session_id, evaluation_status]
+      properties:
+        kind: { type: string, const: evaluation }
+        session_id: { $ref: "#/components/schemas/Id" }
+        evaluation_status: { $ref: "#/components/schemas/EvaluationStatus" }
+    DraftJobResult:
+      type: object
+      required: [kind, draft_id]
+      properties:
+        kind: { type: string, const: draft_generation }
+        draft_id: { $ref: "#/components/schemas/Id" }
+
+    # ------------------------------------------------------------ değerlendirme
+    EvaluationStatus:
+      type: string
+      enum: [pending, ready, needs_review, error]
+      description: |
+        needs_review: rapor üretildi ama kanıt doğrulaması veya şema onarımı kısmen başarısız;
+        yönetici incelemeden sonuç kesin sayılmaz.
+    ReviewStatus:
+      type: string
+      enum: [not_required, pending, reviewed]
+    EvaluationEnvelope:
+      type: object
+      required: [session_id, status, report, error]
+      properties:
+        session_id: { $ref: "#/components/schemas/Id" }
+        status: { $ref: "#/components/schemas/EvaluationStatus" }
+        evaluation_job_id:
+          oneOf:
+            - { $ref: "#/components/schemas/Id" }
+            - { type: "null" }
+        report:
+          oneOf:
+            - { $ref: "#/components/schemas/EvaluationReport" }
+            - { type: "null" }
+        error:
+          oneOf:
+            - { $ref: "#/components/schemas/JobError" }
+            - { type: "null" }
+    Evidence:
+      type: object
+      required: [turn_id, speaker, quote, verified]
+      properties:
+        turn_id: { $ref: "#/components/schemas/Id" }
+        speaker: { $ref: "#/components/schemas/Speaker" }
+        quote:
+          type: string
+          description: Transkriptten birebir alıntı.
+        verified:
+          type: boolean
+          description: Backend alıntının o turda o konuşmacıya ait olduğunu doğruladı mı.
+    PolicyRef:
+      type: object
+      required: [policy_id, title, verified]
+      properties:
+        policy_id: { type: string }
+        title: { type: string }
+        quote: { type: [string, "null"] }
+        verified:
+          type: boolean
+          description: Politika oturumun sabitlenmiş sürümünde var mı.
+    DimensionResult:
+      type: object
+      required: [dimension_id, name, score, max_score, insufficient_evidence, rationale, evidence, policy_refs]
+      properties:
+        dimension_id: { type: string }
+        name: { type: string }
+        score: { $ref: "#/components/schemas/Score" }
+        max_score: { type: integer, const: 4 }
+        insufficient_evidence: { type: boolean }
+        rationale: { type: string }
+        evidence:
+          type: array
+          items: { $ref: "#/components/schemas/Evidence" }
+        policy_refs:
+          type: array
+          items: { $ref: "#/components/schemas/PolicyRef" }
+    TotalScore:
+      type: object
+      description: |
+        Kodda hesaplanır, model üretmez. Herhangi bir boyut null ise `score` null ve
+        `complete=false` olur (eksik boyutta tek toplam gösterilmez).
+      required: [score, max_score, complete, scored_dimensions, total_dimensions]
+      properties:
+        score: { type: [number, "null"], minimum: 0 }
+        max_score: { type: number, minimum: 0 }
+        complete: { type: boolean }
+        scored_dimensions: { type: integer, minimum: 0 }
+        total_dimensions: { type: integer, minimum: 0 }
+    PracticeDrill:
+      type: object
+      required: [title, instructions, focus_dimension_ids]
+      properties:
+        title: { type: string }
+        instructions: { type: string }
+        focus_dimension_ids:
+          type: array
+          items: { type: string }
+        example_phrases:
+          type: array
+          items: { type: string }
+    ModelRunInfo:
+      type: object
+      required: [model, runtime, prompt_version, generated_at, repaired]
+      properties:
+        model: { type: string, examples: ["gemma-4-e4b-it"] }
+        runtime: { type: string, examples: ["transformers", "stub"] }
+        prompt_version: { type: string }
+        generated_at: { $ref: "#/components/schemas/Timestamp" }
+        repaired:
+          type: boolean
+          description: İlk çıktı şemaya uymadı ve bir onarım çağrısı yapıldı.
+    EvaluationReport:
+      type: object
+      required:
+        - rubric_version
+        - dimensions
+        - total
+        - strengths
+        - improvements
+        - practice_drill
+        - flags
+        - model_run
+        - manager_review
+        - effective_total
+      properties:
+        rubric_version: { type: string }
+        dimensions:
+          type: array
+          items: { $ref: "#/components/schemas/DimensionResult" }
+        total: { $ref: "#/components/schemas/TotalScore" }
+        strengths:
+          type: array
+          items: { type: string }
+        improvements:
+          type: array
+          items: { type: string }
+        practice_drill:
+          oneOf:
+            - { $ref: "#/components/schemas/PracticeDrill" }
+            - { type: "null" }
+        flags:
+          type: array
+          description: Ör. `unverified_evidence`, `schema_repaired`, `short_session`.
+          items: { type: string }
+        model_run: { $ref: "#/components/schemas/ModelRunInfo" }
+        manager_review:
+          oneOf:
+            - { $ref: "#/components/schemas/ManagerReview" }
+            - { type: "null" }
+        effective_total:
+          description: İnceleme varsa düzeltilmiş puanlarla hesaplanan toplam, yoksa `total`.
+          $ref: "#/components/schemas/TotalScore"
+
+    # ------------------------------------------------------------ inceleme
+    DimensionAdjustment:
+      type: object
+      required: [dimension_id, score, reason]
+      additionalProperties: false
+      properties:
+        dimension_id: { type: string }
+        score: { $ref: "#/components/schemas/Score" }
+        reason: { type: string, minLength: 10, maxLength: 1000 }
+    AppliedAdjustment:
+      type: object
+      required: [dimension_id, score, original_score, reason]
+      properties:
+        dimension_id: { type: string }
+        score: { $ref: "#/components/schemas/Score" }
+        original_score: { $ref: "#/components/schemas/Score" }
+        reason: { type: string }
+    CreateReviewRequest:
+      type: object
+      required: [decision, adjustments, comment]
+      additionalProperties: false
+      properties:
+        decision:
+          type: string
+          enum: [approved, adjusted]
+          description: "`approved` ise `adjustments` boş olmalı; `adjusted` ise en az bir öğe."
+        adjustments:
+          type: array
+          items: { $ref: "#/components/schemas/DimensionAdjustment" }
+        comment: { type: string, maxLength: 2000 }
+    ManagerReview:
+      type: object
+      required: [id, reviewer, decision, adjustments, comment, created_at]
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        reviewer:
+          type: object
+          required: [id, display_name]
+          properties:
+            id: { $ref: "#/components/schemas/Id" }
+            display_name: { type: string }
+        decision: { type: string, enum: [approved, adjusted] }
+        adjustments:
+          type: array
+          items: { $ref: "#/components/schemas/AppliedAdjustment" }
+        comment: { type: string }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+
+    # ------------------------------------------------------------ admin
+    AdminOverview:
+      type: object
+      required:
+        - active_employees
+        - open_assignments
+        - completed_assignments
+        - sessions_pending_review
+        - sessions_last_7_days
+      properties:
+        active_employees: { type: integer, minimum: 0 }
+        open_assignments: { type: integer, minimum: 0 }
+        completed_assignments: { type: integer, minimum: 0 }
+        sessions_pending_review: { type: integer, minimum: 0 }
+        sessions_last_7_days: { type: integer, minimum: 0 }
+    Employee:
+      type: object
+      required: [id, email, display_name, active, created_at, open_assignments, completed_sessions, last_session_at]
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        email: { type: string, format: email }
+        display_name: { type: string }
+        active: { type: boolean }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        open_assignments: { type: integer, minimum: 0 }
+        completed_sessions: { type: integer, minimum: 0 }
+        last_session_at:
+          oneOf:
+            - { $ref: "#/components/schemas/Timestamp" }
+            - { type: "null" }
+    EmployeeDetail:
+      allOf:
+        - $ref: "#/components/schemas/Employee"
+        - type: object
+          required: [assignments, recent_sessions]
+          properties:
+            assignments:
+              type: array
+              items: { $ref: "#/components/schemas/Assignment" }
+            recent_sessions:
+              type: array
+              maxItems: 20
+              items: { $ref: "#/components/schemas/SessionSummary" }
+    EmployeePage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Employee" }
+        next_cursor: { type: [string, "null"] }
+    CreateEmployeeRequest:
+      type: object
+      required: [email, display_name, temporary_password]
+      additionalProperties: false
+      properties:
+        email: { type: string, format: email, maxLength: 254 }
+        display_name: { type: string, minLength: 1, maxLength: 100 }
+        temporary_password: { type: string, minLength: 8, maxLength: 200 }
+    CreateAssignmentsRequest:
+      type: object
+      required: [training_id, employee_ids]
+      additionalProperties: false
+      properties:
+        training_id: { $ref: "#/components/schemas/Id" }
+        employee_ids:
+          type: array
+          minItems: 1
+          maxItems: 200
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/Id" }
+        due_at:
+          oneOf:
+            - { $ref: "#/components/schemas/Timestamp" }
+            - { type: "null" }
+    CreateAssignmentsResponse:
+      type: object
+      required: [created, skipped_employee_ids]
+      properties:
+        created:
+          type: array
+          items: { $ref: "#/components/schemas/Assignment" }
+        skipped_employee_ids:
+          type: array
+          description: Zaten açık ataması olanlar.
+          items: { $ref: "#/components/schemas/Id" }
+
+    # ------------------------------------------------------------ taslak
+    DraftStatus:
+      type: string
+      enum: [generating, ready, error, published]
+    BusinessRulesForm:
+      type: object
+      description: Yöneticinin doldurduğu yapılandırılmış işletme kuralı formu.
+      required: [business_name, sector, language, policies, customer_situations, must_do, must_not_do, scenario_count]
+      additionalProperties: false
+      properties:
+        business_name: { type: string, minLength: 1, maxLength: 120 }
+        sector: { $ref: "#/components/schemas/Sector" }
+        language: { $ref: "#/components/schemas/Language" }
+        policies:
+          type: array
+          minItems: 1
+          maxItems: 30
+          items:
+            type: object
+            required: [title, body]
+            additionalProperties: false
+            properties:
+              title: { type: string, minLength: 1, maxLength: 120 }
+              body: { type: string, minLength: 1, maxLength: 4000 }
+        customer_situations:
+          type: array
+          description: Ör. "iade süresi geçmiş ürün", "geç check-in".
+          maxItems: 20
+          items: { type: string, maxLength: 300 }
+        must_do:
+          type: array
+          maxItems: 20
+          items: { type: string, maxLength: 300 }
+        must_not_do:
+          type: array
+          maxItems: 20
+          items: { type: string, maxLength: 300 }
+        escalation_rule: { type: [string, "null"], maxLength: 1000 }
+        scenario_count: { type: integer, minimum: 1, maximum: 5 }
+    PolicyItem:
+      type: object
+      required: [id, title, body]
+      properties:
+        id: { type: string, pattern: "^[a-z][a-z0-9_]{1,47}$" }
+        title: { type: string }
+        body: { type: string }
+    RubricDimension:
+      type: object
+      required: [id, name, description, levels, weight]
+      properties:
+        id: { type: string, pattern: "^[a-z][a-z0-9_]{1,47}$" }
+        name: { type: string }
+        description: { type: string }
+        levels:
+          type: array
+          description: 0'dan 4'e beş seviye tanımı (index = puan).
+          minItems: 5
+          maxItems: 5
+          items: { type: string }
+        weight: { type: number, exclusiveMinimum: 0, default: 1 }
+    ScenarioDraft:
+      type: object
+      required: [key, title, difficulty, summary, customer, opening_line, success_criteria, visible_policy_ids, max_turns]
+      properties:
+        key: { type: string, pattern: "^[a-z][a-z0-9_]{1,47}$" }
+        title: { type: string }
+        difficulty: { $ref: "#/components/schemas/Difficulty" }
+        summary: { type: string }
+        customer:
+          type: object
+          required: [name, context, mood, hidden_goal]
+          properties:
+            name: { type: string }
+            context:
+              type: string
+              description: Çalışanın göreceği bağlam.
+            mood: { type: string }
+            hidden_goal:
+              type: string
+              description: Yalnız persona prompt'unda; çalışana gösterilmez.
+        opening_line: { type: string }
+        success_criteria:
+          type: array
+          items: { type: string }
+        visible_policy_ids:
+          type: array
+          description: Müşteri personasının bilebileceği politikalar (rolüne uygun bilgi).
+          items: { type: string }
+        max_turns: { type: integer, minimum: 2, maximum: 20 }
+    DraftContent:
+      type: object
+      required: [scenarios, policies, rubric]
+      additionalProperties: false
+      properties:
+        scenarios:
+          type: array
+          minItems: 1
+          maxItems: 5
+          items: { $ref: "#/components/schemas/ScenarioDraft" }
+        policies:
+          type: array
+          items: { $ref: "#/components/schemas/PolicyItem" }
+        rubric:
+          type: object
+          required: [dimensions]
+          properties:
+            dimensions:
+              type: array
+              minItems: 1
+              maxItems: 8
+              items: { $ref: "#/components/schemas/RubricDimension" }
+    TrainingDraft:
+      type: object
+      required: [id, status, version, form, content, generation_job_id, created_at, updated_at, published_training_ids]
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        status: { $ref: "#/components/schemas/DraftStatus" }
+        version:
+          type: integer
+          minimum: 1
+          description: Her PATCH'te artar; iyimser kilit.
+        form: { $ref: "#/components/schemas/BusinessRulesForm" }
+        content:
+          description: Üretim bitene kadar null.
+          oneOf:
+            - { $ref: "#/components/schemas/DraftContent" }
+            - { type: "null" }
+        generation_job_id:
+          oneOf:
+            - { $ref: "#/components/schemas/Id" }
+            - { type: "null" }
+        warnings:
+          type: array
+          description: Ör. senaryonun var olmayan politikaya atıf yapması.
+          items: { type: string }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+        published_training_ids:
+          type: array
+          items: { $ref: "#/components/schemas/Id" }
+    TrainingDraftPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/TrainingDraft" }
+        next_cursor: { type: [string, "null"] }
+    CreateTrainingDraftRequest:
+      type: object
+      required: [form]
+      additionalProperties: false
+      properties:
+        form: { $ref: "#/components/schemas/BusinessRulesForm" }
+    UpdateTrainingDraftRequest:
+      type: object
+      required: [version, content]
+      additionalProperties: false
+      properties:
+        version: { type: integer, minimum: 1 }
+        content: { $ref: "#/components/schemas/DraftContent" }
+    PublishDraftRequest:
+      type: object
+      required: [version]
+      additionalProperties: false
+      properties:
+        version: { type: integer, minimum: 1 }
+    PublishDraftResponse:
+      type: object
+      required: [draft, trainings]
+      properties:
+        draft: { $ref: "#/components/schemas/TrainingDraft" }
+        trainings:
+          type: array
+          items: { $ref: "#/components/schemas/TrainingSummary" }

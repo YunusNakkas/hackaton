@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "turn_in_progress",
+    "message": "Önceki cevabınız hâlâ işleniyor. Lütfen bekleyin.",
+    "request_id": "req_01JA0000000000000000000001"
+  }
+}

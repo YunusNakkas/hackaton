@@ -1,0 +1,23 @@
+{
+  "items": [
+    {
+      "id": "01JA000000000000000000AS01",
+      "training": {
+        "id": "01JA000000000000000000TR01",
+        "title": "Fişsiz iade talebi",
+        "sector": "retail",
+        "language": "tr",
+        "difficulty": "medium",
+        "summary": "Müşteri, fişini kaybettiği montu iade etmek istiyor ve sinirli.",
+        "estimated_minutes": 5,
+        "max_turns": 8
+      },
+      "employee_id": "01JA0000000000000000000E01",
+      "status": "assigned",
+      "assigned_at": "2026-10-16T09:00:00Z",
+      "due_at": "2026-10-20T18:00:00Z",
+      "completed_session_id": null
+    }
+  ],
+  "next_cursor": null
+}

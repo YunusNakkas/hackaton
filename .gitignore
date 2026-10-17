@@ -1,0 +1,21 @@
+.env
+.DS_Store
+
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# node
+node_modules/
+dist/
+.vite/
+
+# runtime veri
+var/
+*.sqlite3
+*.sqlite3-*
+model-service/weights/

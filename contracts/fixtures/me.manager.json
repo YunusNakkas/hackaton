@@ -1,0 +1,10 @@
+{
+  "user": {
+    "id": "01JA0000000000000000000M01",
+    "email": "mehmet@demo-magaza.test",
+    "display_name": "Mehmet Demir",
+    "role": "manager",
+    "active": true
+  },
+  "organization": { "id": "01JA00000000000000000000G1", "name": "Demo Mağaza" }
+}

@@ -1,0 +1,25 @@
+{
+  "items": [
+    {
+      "id": "01JA000000000000000000TR01",
+      "title": "Fişsiz iade talebi",
+      "sector": "retail",
+      "language": "tr",
+      "difficulty": "medium",
+      "summary": "Müşteri, fişini kaybettiği montu iade etmek istiyor ve sinirli.",
+      "estimated_minutes": 5,
+      "max_turns": 8
+    },
+    {
+      "id": "01JA000000000000000000TH01",
+      "title": "Geç check-in ve oda değişikliği",
+      "sector": "hotel",
+      "language": "tr",
+      "difficulty": "hard",
+      "summary": "Gece yarısı gelen misafir, rezervasyonundaki oda tipinin verilmediğini söylüyor.",
+      "estimated_minutes": 6,
+      "max_turns": 10
+    }
+  ],
+  "next_cursor": null
+}

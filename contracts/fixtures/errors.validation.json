@@ -1,0 +1,13 @@
+{
+  "error": {
+    "code": "validation_error",
+    "message": "Formda düzeltilmesi gereken alanlar var.",
+    "request_id": "req_01JA0000000000000000000002",
+    "details": {
+      "fields": {
+        "email": "Geçerli bir e-posta adresi girin.",
+        "temporary_password": "En az 8 karakter olmalı."
+      }
+    }
+  }
+}

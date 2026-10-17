@@ -1,0 +1,26 @@
+{
+  "id": "01JA000000000000000000TR01",
+  "title": "Fişsiz iade talebi",
+  "sector": "retail",
+  "language": "tr",
+  "difficulty": "medium",
+  "summary": "Müşteri, fişini kaybettiği montu iade etmek istiyor ve sinirli.",
+  "estimated_minutes": 5,
+  "max_turns": 8,
+  "customer": {
+    "name": "Ayşe Hanım",
+    "context": "Üç hafta önce mont almış, fişi yok, kart ekstresi telefonunda."
+  },
+  "rubric_dimensions": [
+    { "id": "empathy", "name": "Empati", "description": "Müşterinin duygusunu fark edip karşılık verme." },
+    { "id": "policy_accuracy", "name": "Politika doğruluğu", "description": "İade politikasını doğru ve eksiksiz aktarma." },
+    { "id": "solution", "name": "Çözüm odaklılık", "description": "Politika içinde uygulanabilir seçenek sunma." },
+    { "id": "clarity", "name": "İletişim netliği", "description": "Kısa, anlaşılır ve kibar ifade." }
+  ],
+  "version": {
+    "scenario_version": "retail.return_no_receipt@1",
+    "policy_version": "retail.policies@1",
+    "rubric_version": "retail.rubric@1",
+    "prompt_version": "customer@1"
+  }
+}
