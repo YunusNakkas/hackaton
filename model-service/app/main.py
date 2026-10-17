@@ -16,6 +16,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
 
+import httpx
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
@@ -23,7 +25,7 @@ from app.priority_lock import PriorityLock
 from app.text_cleanup import strip_thinking
 
 log = logging.getLogger("model-service")
-RUNTIME = os.environ.get("PM_RUNTIME", "transformers")  # transformers | mlx
+RUNTIME = os.environ.get("PM_RUNTIME", "transformers")  # transformers | mlx | ollama
 MODEL_ID = os.environ.get("PM_MODEL_ID", "google/gemma-4-E2B-it")
 MAX_AUDIO_B64 = 4 * 1024 * 1024  # ~30 sn 16 kHz WAV ≈ 1 MB
 
@@ -38,9 +40,14 @@ async def lifespan(_: FastAPI):
     if RUNTIME == "mlx":  # ağır bağımlılıklar yalnız seçilen runtime için import edilir
         from app.adapters.mlx_adapter import MlxAdapter
         adapter = MlxAdapter(MODEL_ID)
-    else:
+    elif RUNTIME == "ollama":
+        from app.adapters.ollama_adapter import OllamaAdapter
+        adapter = OllamaAdapter(MODEL_ID)
+    elif RUNTIME == "transformers":
         from app.adapters.transformers_adapter import TransformersAdapter
         adapter = TransformersAdapter(MODEL_ID)
+    else:
+        raise ValueError(f"Bilinmeyen runtime: {RUNTIME}")
     adapter.load()
     adapter.warmup()  # ilk çağrı ~18 sn sürüyor (S0); kullanıcı beklemesin
     yield
@@ -81,6 +88,11 @@ class GenerateRequest(BaseModel):
 def health():
     if adapter is None or not adapter.ready:
         raise HTTPException(503, "model yükleniyor")
+    if RUNTIME == "ollama":
+        try:
+            adapter.check_health()
+        except httpx.HTTPError as exc:
+            raise HTTPException(503, "Ollama servisine ulaşılamıyor") from exc
     return {"status": "ok", "model": adapter.model_id, "runtime": adapter.runtime, "device": adapter.device}
 
 
@@ -99,6 +111,8 @@ def generate(req: GenerateRequest):
                 if p.type == "text":
                     parts.append({"type": "text", "text": p.text})
                 else:
+                    if RUNTIME == "ollama":
+                        raise HTTPException(422, "Bu yerel Ollama kurulumu yalnız yazılı prova destekler.")
                     try:
                         raw = base64.b64decode(p.audio_b64, validate=True)
                     except binascii.Error as exc:
@@ -111,7 +125,11 @@ def generate(req: GenerateRequest):
         waited = time.perf_counter()
         with slot.acquire(req.priority):
             queue_s = time.perf_counter() - waited
-            out = adapter.generate(messages, req.max_new_tokens, req.sampling.model_dump() if req.sampling else None)
+            try:
+                out = adapter.generate(messages, req.max_new_tokens, req.sampling.model_dump() if req.sampling else None)
+            except (httpx.HTTPError, RuntimeError) as exc:
+                log.exception("Model üretimi başarısız")
+                raise HTTPException(503, "Yerel model üretimi tamamlanamadı.") from exc
     out["text"] = strip_thinking(out["text"])
     log.info("üretim p=%d kuyruk=%.2fs süre=%.2fs token=%d", req.priority, queue_s, out["seconds"], out["new_tokens"])
     return {**out, "queue_seconds": round(queue_s, 3), "model": adapter.model_id, "runtime": adapter.runtime}
