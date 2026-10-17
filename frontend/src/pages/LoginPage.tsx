@@ -14,12 +14,6 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
-const demos = [
-  { email: "elif@demo.test", label: "Elif, çalışan" },
-  { email: "can@demo.test", label: "Can, çalışan" },
-  { email: "mehmet@demo.test", label: "Mehmet, yönetici" },
-];
-
 export function LoginPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -27,7 +21,6 @@ export function LoginPage() {
   const {
     register,
     handleSubmit,
-    setValue,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: { email: "", password: "" } });
 
@@ -51,10 +44,10 @@ export function LoginPage() {
             Müşteriyle konuş. Sonra neyin tuttuğunu gör.
           </h1>
           <p className="mt-5 max-w-sm text-lg text-muted">
-            İşletmenin kendi kurallarıyla sesli prova. Kayıt sende kalır, puan transkriptten gelir.
+            İşletmenin kendi kurallarıyla yazılı prova. Kayıt sende kalır, puan görüşmeden çıkar.
           </p>
         </div>
-        <p className="text-sm text-muted">Türkçe · ses en fazla 30 saniye</p>
+        <p className="text-sm text-muted">Türkçe</p>
       </section>
 
       <section className="flex min-h-screen items-center bg-card px-8 py-12 sm:px-14">
@@ -94,25 +87,6 @@ export function LoginPage() {
           >
             {isSubmitting ? "Giriliyor…" : "Giriş yap"}
           </button>
-
-          <div className="mt-10">
-            <p className="text-sm text-muted">Demo şifresi prova1234</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {demos.map((demo) => (
-                <button
-                  key={demo.email}
-                  type="button"
-                  className="rounded-full border border-line px-3 py-1 text-sm hover:border-ink/30"
-                  onClick={() => {
-                    setValue("email", demo.email, { shouldValidate: true });
-                    setValue("password", "prova1234", { shouldValidate: true });
-                  }}
-                >
-                  {demo.label}
-                </button>
-              ))}
-            </div>
-          </div>
         </form>
       </section>
     </div>

@@ -36,7 +36,7 @@ export function ReportView({ report }: { report: EvaluationReport }) {
           </p>
         </div>
         {report.model_run.runtime === "stub" && (
-          <p className="text-sm text-warn">Puanlar demo modelinden. Gerçek değerlendirme değil.</p>
+          <p className="text-sm text-warn">Puanlar sahte modelden. Gerçek değerlendirme değil.</p>
         )}
       </div>
 

@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     min_audio_ms: int = 500
 
     # stub: süreç içi sahte model (GPU'suz geliştirme/CI). real: model-service'e HTTP.
-    model_mode: Literal["stub", "real"] = "stub"
+    model_mode: Literal["stub", "real"] = "real"
     model_service_url: str = "http://localhost:8100"
     model_timeout_s: float = 180.0
     eval_temperature: float = 1.0  # resmî öneri; S0'da ±1 sapma görüldü, ayarlanacak

@@ -29,7 +29,7 @@ export function Shell() {
           </nav>
           <div className="ml-auto flex items-center gap-3 text-sm">
             {model === "stub" && (
-              <span className="rounded-full bg-warn-soft px-2.5 py-0.5 whitespace-nowrap text-warn">Demo modu</span>
+              <span className="rounded-full bg-warn-soft px-2.5 py-0.5 whitespace-nowrap text-warn">Sahte model</span>
             )}
             {model === "down" && (
               <span className="rounded-full bg-accent-soft px-2.5 py-0.5 whitespace-nowrap text-accent">

@@ -1,4 +1,4 @@
-"""Demo verisi: bir işletme, yönetici + 2 çalışan, mağaza ve otel paketlerinden 6 eğitim.
+"""Başlangıç verisi: bir işletme, yönetici + 2 çalışan, mağaza ve otel paketlerinden 6 eğitim.
 
 Kullanım: python -m app.seed   (idempotent; işletme varsa bir şey yapmaz)
 Şifre: PM_DEMO_PASSWORD (varsayılan yalnızca dev/test için).
@@ -16,7 +16,7 @@ from app.db import get_sessionmaker
 from app.models import Assignment, Organization, Training, User
 
 DATA = Path(__file__).resolve().parents[2] / "data"
-ORG_NAME = "Demo İşletme"
+ORG_NAME = "Merkez İşletme"
 USERS = [
     ("mehmet@demo.test", "Mehmet Demir", "manager"),
     ("elif@demo.test", "Elif Yılmaz", "employee"),
