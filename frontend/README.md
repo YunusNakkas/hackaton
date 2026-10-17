@@ -1,15 +1,18 @@
 # frontend/
 
-Frontend sahibinin alanı. Stack: React + TypeScript + Vite, Tailwind, TanStack Query, React Router, React Hook Form + Zod, MSW.
+Çalışan arayüzü: giriş, eğitimler, sesli prova, değerlendirme. Yönetici inceleme uçları backend'de olmadığı için burada yok.
 
-Backend'e bağımlılık yalnızca `../contracts/` üzerinden:
+Stack: React, TypeScript, Vite, Tailwind, TanStack Query, React Router, React Hook Form, Zod.
 
 ```bash
-npx openapi-typescript ../contracts/openapi.yaml -o src/api/schema.d.ts
+cd frontend
+npm install
+npm run dev
 ```
 
-- MSW handler'ları `../contracts/fixtures/*.json` dosyalarını döndürsün; fixture'ları kopyalamayın, import edin.
-- Bütün istekler `credentials: "include"` ve mutasyonlarda `X-Requested-With: provamusteri` başlığı taşır.
-- `/health` → `model_service: "stub"` ise ekranda "demo/mock modu" etiketi gösterilir.
-- Ses kaydı: `MediaRecorder` (Chrome/Firefox `audio/webm;codecs=opus`, Safari `audio/mp4`).
-- Akış özeti için `../contracts/README.md` dosyasına bakın.
+Vite `/api` isteklerini `http://127.0.0.1:8000` adresine iletir. API ve worker README'deki gibi ayakta olmalı. CORS kökeni `http://localhost:5173`.
+
+- İstekler `credentials: "include"` kullanır. Durum değiştiren istekler `X-Requested-With: provamusteri` taşır.
+- `/health` → `model_service: "stub"` ise üst barda "Demo modu" görünür.
+- Ses kaydı `MediaRecorder` ile yapılır; 30 saniyede kendisi durur.
+- Türler sözleşmeye göre elde tutulur. Yenilemek için: `npm run gen:api` (`src/api/schema.d.ts`).
