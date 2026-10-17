@@ -1,0 +1,15 @@
+{
+  "$comment": "S0 spike için sentetik Türkçe ASR test seti. Ses macOS 'say -v Yelda' ile üretilir (eval/s0/make_samples.sh). Sentetik ses gerçek mikrofon kaydından kolaydır; sonuçlar alt sınır değil üst sınır kabul edilmeli.",
+  "items": [
+    { "id": "tr01", "text": "Merhaba, bu montu iade etmek istiyorum ama fişim yok." },
+    { "id": "tr02", "text": "Kart ekstrem telefonumda var, ödemeyi kartla yapmıştım." },
+    { "id": "tr03", "text": "Parayı kartıma geri alabilecek miyim, hediye çeki istemiyorum." },
+    { "id": "tr04", "text": "Üç hafta önce aldım, etiketleri hâlâ üzerinde duruyor." },
+    { "id": "tr05", "text": "Rezervasyonumda deniz manzaralı oda yazıyor ama bana arka cephe verildi." },
+    { "id": "tr06", "text": "Saat gece yarısını geçti ve çok yorgunum, lütfen bir çözüm bulun." },
+    { "id": "tr07", "text": "Odanın klimasının çalışmadığını iki kez resepsiyona bildirdim." },
+    { "id": "tr08", "text": "Kahvaltı fiyata dahil mi, yoksa ayrıca 250 lira mı ödeyeceğim?" },
+    { "id": "tr09", "text": "Anlıyorum Ayşe Hanım, hemen sistemde satın alma kaydınıza bakıyorum." },
+    { "id": "tr10", "text": "Kayıt bulunursa iade üç iş günü içinde kartınıza yansır." }
+  ]
+}
