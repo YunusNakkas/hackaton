@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     session_secret: str = "change-me"
     cors_origins: list[str] = ["http://localhost:5173"]
     max_audio_bytes: int = 10 * 1024 * 1024
-    max_audio_seconds: int = 60
+    max_audio_seconds: int = 30  # Gemma 4 ses girişi en fazla 30 sn
 
     model_service_url: str = "http://localhost:8100"
     model_mode: Literal["stub", "real"] = "stub"
