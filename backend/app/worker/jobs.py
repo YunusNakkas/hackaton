@@ -206,22 +206,39 @@ def process_draft(db: Session, job: Job, settings: Settings, model: ModelClient)
     _stage(db, job, "generating")
     policies = draftsvc.form_policies(draft.form)
     ctx = {"form": draft.form, "policies": policies}
+    extra_scenarios = 0
+
+    def validate_generated(raw: str) -> draftsvc.GeneratedPart:
+        nonlocal extra_scenarios
+        part = draftsvc.GeneratedPart.model_validate(evalsvc.parse_json_output(raw))
+        expected_count = draft.form["scenario_count"]
+        if len(part.scenarios) > expected_count:
+            extra_scenarios = len(part.scenarios) - expected_count
+            part.scenarios = part.scenarios[:expected_count]
+        elif len(part.scenarios) < expected_count:
+            raise evalsvc.EvaluationShapeError(
+                f"scenarios: Tam olarak {expected_count} senaryo üretmelisin; "
+                f"{len(part.scenarios)} senaryo üretildi. Fazla senaryoları kaldır veya eksikleri tamamla.")
+        return part
+
     raw = model.chat(prompts.draft_messages(draft.form, policies), max_new_tokens=2000, temperature=1.0,
                      purpose="draft", stub_context=ctx)
     try:
-        part = draftsvc.GeneratedPart.model_validate(evalsvc.parse_json_output(raw))
+        part = validate_generated(raw)
     except (evalsvc.EvaluationShapeError, draftsvc.ValidationError) as first:
         problem = draftsvc.validation_problem(first) if isinstance(first, draftsvc.ValidationError) else str(first)
         raw = model.chat(prompts.repair_messages(raw, problem), max_new_tokens=2000, temperature=0.2,
                          purpose="draft_repair", stub_context=ctx)
         try:
-            part = draftsvc.GeneratedPart.model_validate(evalsvc.parse_json_output(raw))
+            part = validate_generated(raw)
         except (evalsvc.EvaluationShapeError, draftsvc.ValidationError) as second:
             log.warning("taslak şeması onarılamadı: %s", second)
             raise JobFailed("internal_error", "Taslak üretilemedi. Tekrar deneyebilirsiniz.", True) from second
     content = {"scenarios": [s.model_dump() for s in part.scenarios], "policies": policies,
                "rubric": part.rubric.model_dump()}
     draft.content, draft.warnings, draft.status = content, draftsvc.warnings_for(content), "ready"
+    if extra_scenarios:
+        draft.warnings = [*draft.warnings, "Modelin ürettiği ek senaryolar çıkarılarak istediğiniz sayıda senaryo hazırlandı."]
     return {"kind": "draft_generation", "draft_id": draft.id}
 
 
