@@ -28,6 +28,7 @@ from app.services import drafts as draftsvc
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 OPEN_ASSIGNMENT = ("assigned", "in_progress")
+NON_ASCII_EMAIL = "E-posta adresinde Türkçe karakter (ç, ğ, ı, ö, ş, ü) kullanılamaz."
 
 
 def _validation(fields: dict[str, str], message: str = "Girdi doğrulanamadı.") -> ApiError:
@@ -85,6 +86,10 @@ def list_employees(cursor: str | None = None, limit: int = Query(20, ge=1, le=10
 @router.post("/employees", status_code=201)
 def create_employee(body: CreateEmployeeRequest, me: User = Depends(require_manager), db: Session = Depends(get_db)):
     email = body.email.strip().lower()
+    # Tarayıcıların type="email" alanı ASCII dışı yerel kısmı reddediyor; böyle bir kullanıcı oluşturulsa
+    # giriş sayfasından giriş yapamaz. Çoğu e-posta sistemi de desteklemiyor.
+    if not email.isascii():
+        raise _validation({"email": NON_ASCII_EMAIL}, NON_ASCII_EMAIL)
     if db.query(User.id).filter(func.lower(User.email) == email).first():
         raise conflict("email_taken", "Bu e-posta adresiyle bir kullanıcı zaten var.")
     u = User(org_id=me.org_id, email=email, display_name=body.display_name.strip(), role="employee",

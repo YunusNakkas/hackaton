@@ -43,6 +43,15 @@ export function CreateEmployeeModal({ open, onClose }: CreateEmployeeModalProps)
       setErrorMsg("Lütfen tüm alanları doldurun.");
       return;
     }
+    // Tarayıcının kendi e-posta kontrolü yerine açık mesaj (form noValidate); backend de aynı kuralı uygular.
+    if (/[^\x00-\x7F]/.test(email)) {
+      setErrorMsg("E-posta adresinde Türkçe karakter (ç, ğ, ı, ö, ş, ü) kullanılamaz.");
+      return;
+    }
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) {
+      setErrorMsg("Geçerli bir e-posta adresi girin (ör. ayse@isletme.com).");
+      return;
+    }
     createMutation.mutate({
       display_name: displayName.trim(),
       email: email.trim().toLowerCase(),
@@ -68,7 +77,7 @@ export function CreateEmployeeModal({ open, onClose }: CreateEmployeeModalProps)
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} noValidate className="p-6 space-y-4">
           {errorMsg && (
             <div className="rounded-2xl border border-accent/20 bg-accent-soft/50 p-4 text-sm text-accent">
               {errorMsg}

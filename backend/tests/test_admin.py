@@ -318,3 +318,16 @@ def test_repair_generated_fixes_real_model_format_errors():
     assert warnings == ["2 senaryo istendi, model 3 üretti; fazlası çıkarıldı."]
     _, few = repair_generated({"scenarios": [{**scn, "key": "a"}], "rubric": raw["rubric"]}, form_policies(FORM), 3)
     assert few == ["3 senaryo istendi, model yalnızca 1 üretti."]
+
+
+def test_non_ascii_email_rejected_with_clear_message(manager_client):
+    """Tarayıcı type=email alanı bu adresi reddettiği için kullanıcı giriş yapamazdı."""
+    res = manager_client.post("/api/v1/admin/employees", headers=CSRF, json={
+        "email": "ayşee@demo.test", "display_name": "Ayşe", "temporary_password": "gecici-123"})
+    assert res.status_code == 422
+    assert_contract("Error", res.json())
+    err = res.json()["error"]
+    assert "Türkçe karakter" in err["message"] and "Türkçe karakter" in err["details"]["fields"]["email"]
+    ok = manager_client.post("/api/v1/admin/employees", headers=CSRF, json={
+        "email": "aysee@demo.test", "display_name": "Ayşe", "temporary_password": "gecici-123"})
+    assert ok.status_code == 201 and ok.json()["display_name"] == "Ayşe"  # görünen adda Türkçe serbest
