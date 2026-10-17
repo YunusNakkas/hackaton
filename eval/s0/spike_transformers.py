@@ -139,7 +139,10 @@ def main() -> None:
 
     t0 = time.perf_counter()
     processor = AutoProcessor.from_pretrained(args.model)
-    model = AutoModelForMultimodalLM.from_pretrained(args.model, dtype="auto", device_map="auto")
+    # device_map="auto" bellek az görünürse katmanları diske taşıyor ve MPS'te "meta device"
+    # hatası veriyor; birleşik bellekte tüm modeli doğrudan cihaza yüklüyoruz.
+    device = "mps" if torch.backends.mps.is_available() else "cpu"
+    model = AutoModelForMultimodalLM.from_pretrained(args.model, dtype="auto", device_map=device)
     result["load_s"] = round(time.perf_counter() - t0, 1)
     result["dtype"] = str(next(model.parameters()).dtype)
     result["mem_after_load"] = mem_gb()
