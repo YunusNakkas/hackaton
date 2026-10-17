@@ -1,79 +1,224 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { api } from "../api/client";
-import type { AssignmentPage, Me, TrainingPage } from "../api/types";
+import { api, allPages } from "../api/client";
+import type { AdminOverview, Assignment, Me, TrainingSummary } from "../api/types";
 import { assignmentLabel, difficultyLabel, formatDue, sectorLabel } from "../lib/labels";
 
 export function HomePage() {
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<Me>("/me") });
+  const isManager = me.data?.user.role === "manager";
+
   const trainings = useQuery({
     queryKey: ["trainings"],
-    queryFn: () => api<TrainingPage>("/trainings?limit=50"),
+    queryFn: () => allPages<TrainingSummary>("/trainings?limit=100"),
   });
+
   const assignments = useQuery({
     queryKey: ["assignments"],
-    queryFn: () => api<AssignmentPage>("/assignments?limit=50"),
+    queryFn: () => allPages<Assignment>("/assignments?limit=100"),
+  });
+
+  const adminOverview = useQuery({
+    queryKey: ["admin-overview"],
+    enabled: isManager,
+    queryFn: () => api<AdminOverview>("/admin/overview"),
   });
 
   const first = me.data?.user.display_name.split(" ")[0];
 
   return (
-    <div className="space-y-12">
-      <header>
-        <h1 className="font-serif text-4xl tracking-tight">Merhaba{first ? `, ${first}` : ""}</h1>
-        <p className="mt-2 max-w-xl text-muted">
-          Atanan provayı bitir ya da listeden bir senaryo seç. Müşteri önce yazar, sen yazarak cevap verirsin.
-        </p>
+    <div className="space-y-10 animate-in fade-in duration-300">
+      {/* Karşılama Başlığı */}
+      <header className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+        <div>
+          <h1 className="font-serif text-3xl sm:text-4xl tracking-tight text-ink font-semibold">
+            Merhaba{first ? `, ${first}` : ""}
+          </h1>
+          <p className="mt-1.5 max-w-xl text-sm sm:text-base text-muted">
+            {isManager
+              ? "Yönetici olarak çalışanlarınıza eğitim atayabilir, provaları denetleyebilir veya katalogdaki senaryoları test edebilirsiniz."
+              : "Sana atanan provayı tamamla ya da katalogdan bir senaryo seçerek kendini geliştir. Müşteri yazar, sen yazarak yanıt verirsin."}
+          </p>
+        </div>
+
+        {isManager && (
+          <Link
+            to="/admin"
+            className="flex items-center gap-2 self-start sm:self-auto rounded-full bg-primary/10 border border-primary/20 px-4 py-2 text-xs font-semibold text-primary hover:bg-primary hover:text-white transition-all shadow-xs"
+          >
+            <span>Yönetici Paneline Git</span>
+            <span>→</span>
+          </Link>
+        )}
       </header>
 
-      <section>
-        <h2 className="text-sm tracking-wide text-muted uppercase">Sana atanan</h2>
-        {assignments.isLoading && <p className="mt-3 text-muted">Yükleniyor…</p>}
+      {/* Yönetici için Hızlı Bakış Kartı */}
+      {isManager && adminOverview.data && (
+        <section className="rounded-3xl border border-primary/25 bg-gradient-to-r from-card to-card-subtle p-6 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-primary">
+                Yönetici Durum Özeti
+              </p>
+              <div className="mt-3 flex flex-wrap gap-4 text-sm text-ink">
+                <div>
+                  <span className="font-serif text-2xl font-bold text-ink mr-1.5">
+                    {adminOverview.data.active_employees}
+                  </span>
+                  <span className="text-xs text-muted">Çalışan</span>
+                </div>
+                <div className="border-l border-line pl-4">
+                  <span className="font-serif text-2xl font-bold text-primary mr-1.5">
+                    {adminOverview.data.open_assignments}
+                  </span>
+                  <span className="text-xs text-muted">Açık Atama</span>
+                </div>
+                <div className="border-l border-line pl-4">
+                  <span className="font-serif text-2xl font-bold text-warn mr-1.5">
+                    {adminOverview.data.sessions_pending_review}
+                  </span>
+                  <span className="text-xs text-muted">İnceleme Bekleyen</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Link
+                to="/admin"
+                className="rounded-full bg-primary px-4 py-2 text-xs font-semibold text-white hover:opacity-95 transition-opacity"
+              >
+                Yönetici Paneli & Atama Yap →
+              </Link>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Çalışana Atanan Eğitimler */}
+      <section className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted">
+            {isManager ? "Senin İçin Atananlar" : "Sana Atanan Eğitimler"}
+          </h2>
+          {assignments.data && (
+            <span className="text-xs text-muted">
+              {assignments.data.items.length} atama
+            </span>
+          )}
+        </div>
+
+        {assignments.isLoading && <p className="text-sm text-muted">Atamalar yükleniyor…</p>}
         {assignments.data && assignments.data.items.length === 0 && (
-          <p className="mt-3 text-muted">Açık atama yok. Aşağıdan serbest prova başlatabilirsin.</p>
+          <div className="rounded-2xl border border-line bg-card p-5 text-sm text-muted">
+            Açık bir zorunlu atamanız bulunmuyor. Aşağıdaki katalogdan serbest prova başlatabilirsiniz.
+          </div>
         )}
-        <div className="mt-4 grid gap-3">
+
+        <div className="grid gap-3">
           {assignments.data?.items.map((item) => {
             const due = formatDue(item.due_at);
+            const isCompleted = item.status === "completed";
             const href =
-              item.status === "completed" && item.completed_session_id
+              isCompleted && item.completed_session_id
                 ? `/sessions/${item.completed_session_id}`
                 : `/trainings/${item.training.id}?assignment=${item.id}`;
             return (
               <Link
                 key={item.id}
                 to={href}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-card px-5 py-4 hover:border-ink/25"
+                className="group flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-line bg-card p-5 hover:border-primary/40 hover:shadow-sm transition-all"
               >
-                <div>
-                  <p className="text-sm text-muted">
-                    {sectorLabel(item.training.sector)} · {assignmentLabel[item.status]}
-                    {due ? ` · ${due}` : ""}
-                  </p>
-                  <p className="mt-0.5 text-lg">{item.training.title}</p>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 text-xs text-muted">
+                    <span className="font-medium text-primary">
+                      {sectorLabel(item.training.sector)}
+                    </span>
+                    <span>·</span>
+                    <span
+                      className={`font-medium ${
+                        isCompleted
+                          ? "text-pine"
+                          : item.status === "in_progress"
+                            ? "text-primary"
+                            : "text-warn"
+                      }`}
+                    >
+                      {assignmentLabel[item.status]}
+                    </span>
+                    {due && (
+                      <>
+                        <span>·</span>
+                        <span className="text-muted">{due}</span>
+                      </>
+                    )}
+                  </div>
+                  <h3 className="text-lg font-semibold text-ink group-hover:text-primary transition-colors">
+                    {item.training.title}
+                  </h3>
+                  <p className="text-xs text-muted">{item.training.summary}</p>
                 </div>
-                <span className="text-sm">{item.status === "completed" ? "Rapor" : "Başla"}</span>
+
+                <div className="flex items-center gap-3">
+                  <span
+                    className={`rounded-full px-4 py-2 text-xs font-semibold transition-all ${
+                      isCompleted
+                        ? "border border-pine/30 bg-pine-soft text-pine"
+                        : "bg-primary text-white shadow-xs group-hover:scale-105"
+                    }`}
+                  >
+                    {isCompleted ? "Sonuç Raporunu Gör" : "Provaya Başla →"}
+                  </span>
+                </div>
               </Link>
             );
           })}
         </div>
       </section>
 
-      <section>
-        <h2 className="text-sm tracking-wide text-muted uppercase">Eğitimler</h2>
-        {trainings.isError && <p className="mt-3 text-accent">Liste alınamadı.</p>}
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+      {/* Tüm Eğitimler Kataloğu */}
+      <section className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted">
+            Tüm Eğitim Senaryoları Kataloğu
+          </h2>
+          {trainings.data && (
+            <span className="text-xs text-muted">{trainings.data.items.length} senaryo</span>
+          )}
+        </div>
+
+        {trainings.isError && <p className="text-sm text-accent">Katalog alınamadı.</p>}
+
+        <div className="grid gap-4 sm:grid-cols-2">
           {trainings.data?.items.map((training) => (
             <Link
               key={training.id}
               to={`/trainings/${training.id}`}
-              className="rounded-2xl border border-line bg-card p-5 hover:border-ink/25"
+              className="group rounded-3xl border border-line bg-card p-6 hover:border-primary/40 hover:shadow-sm transition-all flex flex-col justify-between"
             >
-              <p className="text-sm text-muted">
-                {sectorLabel(training.sector)} · {difficultyLabel[training.difficulty]} · {training.estimated_minutes} dk
-              </p>
-              <h3 className="mt-1 font-serif text-2xl leading-tight">{training.title}</h3>
-              <p className="mt-2 text-muted">{training.summary}</p>
+              <div>
+                <div className="flex items-center justify-between text-xs text-muted mb-2">
+                  <span className="font-medium text-primary">
+                    {sectorLabel(training.sector)}
+                  </span>
+                  <span className="rounded-full bg-card-subtle px-2 py-0.5 border border-line text-muted">
+                    {difficultyLabel[training.difficulty]} · {training.estimated_minutes} dk
+                  </span>
+                </div>
+
+                <h3 className="font-serif text-xl font-semibold leading-tight text-ink group-hover:text-primary transition-colors">
+                  {training.title}
+                </h3>
+                <p className="mt-2 text-xs sm:text-sm text-muted line-clamp-3">
+                  {training.summary}
+                </p>
+              </div>
+
+              <div className="mt-5 pt-3 border-t border-line flex items-center justify-between text-xs">
+                <span className="text-muted">En fazla {training.max_turns} tur konuşma</span>
+                <span className="font-semibold text-primary group-hover:translate-x-0.5 transition-transform">
+                  İncele & Başla →
+                </span>
+              </div>
             </Link>
           ))}
         </div>
