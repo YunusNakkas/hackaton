@@ -43,6 +43,11 @@ GET  /sessions/{id}/evaluation     → pending | ready | needs_review | error
 
 ## Sürüm notları
 
+### v0.2.1
+- `/health` → `audio_input` (zorunlu). `false` ise mikrofon düğmesi gösterilmez, yalnız yazılı cevap sunulur.
+- Yeni hata kodu `audio_unsupported`: ses desteklemeyen kurulumda `POST /sessions/{id}/turns` 422 döner.
+- Fixture: `health.real.json`, `health.text_only.json`.
+
 ### v0.2.0
 - **Tekrar dene:** `POST /sessions` isteğine isteğe bağlı `practice` (`of_session_id`, `mode: same | adaptive`, `focus_dimension_ids`).
   Rapordaki iki düğme: *Aynı senaryoyu tekrar dene* (`same`) ve *Zorlaştırılmış tekrar* (`adaptive`). Odak boyutlar için

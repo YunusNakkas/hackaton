@@ -172,9 +172,30 @@ export interface paths {
          *     - Aynı `client_request_id` tekrar gönderilirse aynı `job_id` döner (ses tekrar işlenmez).
          *     - Limitler: en fazla 10 MB ve 30 sn (Gemma 4 ses girişi sınırı); en az 0,5 sn. İstemci 30 sn'de kaydı otomatik durdurmalı.
          *     - Kayıtta en az 0,3 sn konuşma algılanmazsa 422 `no_speech` döner (sessiz kayıtta ASR metin uyduruyor).
+         *     - Kurulum sesi desteklemiyorsa (`/health` → `audio_input: false`) 422 `audio_unsupported`; çalışan yazarak cevap verir.
          *       ASR sonucu anlaşılamazsa iş `error.code = no_speech`, `retryable = false` ile biter; kullanıcı yeniden kaydeder.
          */
         post: operations["submitTurn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{sessionId}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Çalışanın yazdığı cevabı kabul eder. Ses kaydı ve ASR yoktur; müşteri cevabı
+         *     aynı tur işiyle üretilir. Aynı `client_request_id` aynı işi döndürür.
+         */
+        post: operations["submitMessage"];
         delete?: never;
         options?: never;
         head?: never;
@@ -392,6 +413,62 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/policy-extractions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Menü, broşür veya kural panosu fotoğraflarından (1–3 adet) Gemma ile politika metni çıkarır.
+         *     202 döner; `job_id` yoklanır, bitince `status=ready` ve `policies` dolar.
+         *     Çıkarılan politikalar doğrudan yayımlanmaz: yönetici okuyup düzeltir ve taslak formunun
+         *     `policies` alanına kendisi aktarır. Her politika hangi fotoğraftan geldiğini (`image_id`) taşır.
+         *     Biçimler: JPEG, PNG, WebP, HEIC/HEIF (iPhone). Her fotoğraf en fazla 10 MB.
+         */
+        post: operations["createPolicyExtraction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/policy-extractions/{extractionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getPolicyExtraction"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/policy-extractions/{extractionId}/images/{imageId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Yüklenen fotoğraf (JPEG'e çevrilmiş). Yönetici çıkarılan metni fotoğrafla karşılaştırır. */
+        get: operations["getPolicyExtractionImage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/training-drafts": {
         parameters: {
             query?: never;
@@ -493,10 +570,15 @@ export interface components {
             };
         };
         /** @enum {string} */
-        ErrorCode: "unauthorized" | "invalid_credentials" | "forbidden" | "csrf_header_missing" | "not_found" | "conflict" | "turn_in_progress" | "session_not_active" | "evaluation_not_ready" | "version_mismatch" | "email_taken" | "job_not_retryable" | "payload_too_large" | "unsupported_media_type" | "audio_too_short" | "audio_too_long" | "audio_undecodable" | "no_speech" | "validation_error" | "rate_limited" | "model_unavailable" | "internal_error";
+        ErrorCode: "unauthorized" | "invalid_credentials" | "forbidden" | "csrf_header_missing" | "not_found" | "conflict" | "turn_in_progress" | "session_not_active" | "evaluation_not_ready" | "version_mismatch" | "email_taken" | "job_not_retryable" | "payload_too_large" | "unsupported_media_type" | "audio_too_short" | "audio_too_long" | "audio_undecodable" | "no_speech" | "image_undecodable" | "audio_unsupported" | "validation_error" | "rate_limited" | "model_unavailable" | "internal_error";
         Health: {
             /** @enum {string} */
             status: "ok" | "degraded";
+            /**
+             * @description Bu kurulum sesli cevabı (ASR) destekliyor mu. false ise UI mikrofon düğmesini göstermez,
+             *     yalnız yazılı cevap sunar (ör. Windows'ta yerel Ollama). Model servisine ulaşılamıyorsa false.
+             */
+            audio_input: boolean;
             version: string;
             /**
              * @description `stub` ise cevaplar gerçek model değildir; UI bunu göstermelidir.
@@ -586,6 +668,27 @@ export interface components {
             assignment_id?: components["schemas"]["Id"] | null;
             /** Format: uuid */
             client_request_id: string;
+            /**
+             * @description Doluysa oturum, raporu çıkmış bir önceki oturumun tekrarıdır. Rapordaki iki düğme:
+             *     `same` → aynı senaryo + odak hedefi; `adaptive` → müşteri odak boyuta göre zorlaşır.
+             *     Önceki oturum kullanıcının kendi oturumu, değerlendirmesi `ready`/`needs_review` ve
+             *     `training_id` ile aynı eğitim olmalı (aksi 404/409/422).
+             */
+            practice?: components["schemas"]["PracticeRequest"] | null;
+        };
+        /** @enum {string} */
+        PracticeMode: "same" | "adaptive";
+        PracticeRequest: {
+            of_session_id: components["schemas"]["Id"];
+            mode: components["schemas"]["PracticeMode"];
+            /** @description Genellikle önceki raporun `practice_drill.focus_dimension_ids` değeri. */
+            focus_dimension_ids: string[];
+        };
+        PracticeInfo: {
+            of_session_id: components["schemas"]["Id"];
+            mode: components["schemas"]["PracticeMode"];
+            /** @description Ekranda "Bu sefer şuna odaklan" olarak gösterilir. */
+            focus_dimensions: components["schemas"]["RubricDimensionPublic"][];
         };
         CreateSessionResponse: {
             session: components["schemas"]["Session"];
@@ -621,6 +724,8 @@ export interface components {
                 id: components["schemas"]["Id"];
                 display_name: string;
             };
+            /** @description Tekrar oturumuysa mod ve odak boyutlar; değilse null. */
+            practice: components["schemas"]["PracticeInfo"] | null;
             assignment_id: components["schemas"]["Id"] | null;
             status: components["schemas"]["SessionStatus"];
             /** @description Oturum bitmeden null. */
@@ -651,6 +756,11 @@ export interface components {
             /** @description İstemcinin ölçtüğü süre; yalnız teşhis içindir, sunucu kendi ölçer. */
             client_duration_ms?: number;
         };
+        SubmitMessageRequest: {
+            text: string;
+            /** Format: uuid */
+            client_request_id: string;
+        };
         TurnAccepted: {
             job_id: components["schemas"]["Id"];
             employee_turn_id: components["schemas"]["Id"];
@@ -660,6 +770,8 @@ export interface components {
             evaluation_job_id: components["schemas"]["Id"];
         };
         SessionSummary: {
+            /** @description Tekrar oturumuysa modu; değilse null. */
+            practice_mode: components["schemas"]["PracticeMode"] | null;
             id: components["schemas"]["Id"];
             training: components["schemas"]["TrainingSummary"];
             employee: {
@@ -680,12 +792,13 @@ export interface components {
             next_cursor: string | null;
         };
         /** @enum {string} */
-        JobKind: "opening" | "turn" | "evaluation" | "draft_generation";
+        JobKind: "opening" | "turn" | "evaluation" | "draft_generation" | "policy_extraction";
         /**
          * @description opening: queued → synthesizing → ready
          *     turn: queued → transcribing → generating → synthesizing → ready
          *     evaluation: queued → evaluating → ready
          *     draft_generation: queued → generating → ready
+         *     policy_extraction: queued → generating → ready
          * @enum {string}
          */
         JobStatus: "queued" | "transcribing" | "generating" | "synthesizing" | "evaluating" | "ready" | "error";
@@ -699,7 +812,7 @@ export interface components {
             created_at: components["schemas"]["Timestamp"];
             updated_at: components["schemas"]["Timestamp"];
             /** @description Yalnız `ready` iken dolu. */
-            result: components["schemas"]["TurnJobResult"] | components["schemas"]["OpeningJobResult"] | components["schemas"]["EvaluationJobResult"] | components["schemas"]["DraftJobResult"] | null;
+            result: components["schemas"]["TurnJobResult"] | components["schemas"]["OpeningJobResult"] | components["schemas"]["EvaluationJobResult"] | components["schemas"]["DraftJobResult"] | components["schemas"]["PolicyExtractionJobResult"] | null;
             /** @description Yalnız `error` iken dolu. */
             error: components["schemas"]["JobError"] | null;
         };
@@ -732,6 +845,11 @@ export interface components {
             /** @constant */
             kind: "draft_generation";
             draft_id: components["schemas"]["Id"];
+        };
+        PolicyExtractionJobResult: {
+            /** @constant */
+            kind: "policy_extraction";
+            extraction_id: components["schemas"]["Id"];
         };
         /**
          * @description needs_review: rapor üretildi ama kanıt doğrulaması veya şema onarımı kısmen başarısız;
@@ -805,6 +923,8 @@ export interface components {
             repaired: boolean;
         };
         EvaluationReport: {
+            /** @description Tekrar oturumunda öne çıkarılacak boyutlar; normal oturumda boş. */
+            focus_dimension_ids: string[];
             rubric_version: string;
             dimensions: components["schemas"]["DimensionResult"][];
             total: components["schemas"]["TotalScore"];
@@ -891,6 +1011,37 @@ export interface components {
             created: components["schemas"]["Assignment"][];
             /** @description Zaten açık ataması olanlar. */
             skipped_employee_ids: components["schemas"]["Id"][];
+        };
+        CreatePolicyExtractionForm: {
+            images: string[];
+        };
+        ExtractionImage: {
+            id: components["schemas"]["Id"];
+            filename: string;
+            width: number;
+            height: number;
+        };
+        ExtractedPolicy: {
+            title: string;
+            /** @description Fotoğraftaki metin; model yorum eklemez, okunamayan kısmı "[okunamadı]" yazar. */
+            body: string;
+            image_id: components["schemas"]["Id"];
+            /** @description Metnin bir kısmı okunamadı veya belirsiz; yönetici fotoğrafla karşılaştırmalı. */
+            uncertain: boolean;
+        };
+        /** @enum {string} */
+        PolicyExtractionStatus: "processing" | "ready" | "error";
+        PolicyExtraction: {
+            id: components["schemas"]["Id"];
+            status: components["schemas"]["PolicyExtractionStatus"];
+            job_id: components["schemas"]["Id"];
+            images: components["schemas"]["ExtractionImage"][];
+            /** @description Yalnız `ready` iken dolu. Boş liste, fotoğrafta politika bulunamadığı anlamına gelir. */
+            policies: components["schemas"]["ExtractedPolicy"][] | null;
+            /** @description Ör. "2. fotoğraf bulanık", "fotoğrafta metin bulunamadı". */
+            warnings: string[];
+            error: components["schemas"]["JobError"] | null;
+            created_at: components["schemas"]["Timestamp"];
         };
         /** @enum {string} */
         DraftStatus: "generating" | "ready" | "error" | "published";
@@ -1067,6 +1218,7 @@ export interface components {
         TurnId: components["schemas"]["Id"];
         JobId: components["schemas"]["Id"];
         EmployeeId: components["schemas"]["Id"];
+        ExtractionId: components["schemas"]["Id"];
         DraftId: components["schemas"]["Id"];
     };
     requestBodies: never;
@@ -1338,6 +1490,39 @@ export interface operations {
             409: components["responses"]["Conflict"];
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["ValidationError"];
+        };
+    };
+    submitMessage: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Requested-With": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                sessionId: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubmitMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description Mesaj kabul edildi, müşteri cevabı kuyrukta */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TurnAccepted"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationError"];
         };
     };
@@ -1709,6 +1894,88 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationError"];
+        };
+    };
+    createPolicyExtraction: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Requested-With": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["CreatePolicyExtractionForm"];
+            };
+        };
+        responses: {
+            /** @description Fotoğraflar alındı, okuma kuyrukta */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PolicyExtraction"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["ValidationError"];
+        };
+    };
+    getPolicyExtraction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                extractionId: components["parameters"]["ExtractionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Okuma durumu ve (hazırsa) çıkarılan politikalar */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PolicyExtraction"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getPolicyExtractionImage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                extractionId: components["parameters"]["ExtractionId"];
+                imageId: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Fotoğraf */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     listTrainingDrafts: {

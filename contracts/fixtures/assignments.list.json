@@ -16,7 +16,8 @@
       "status": "assigned",
       "assigned_at": "2026-10-16T09:00:00Z",
       "due_at": "2026-10-20T18:00:00Z",
-      "completed_session_id": null
+      "completed_session_id": null,
+      "channel": "message"
     }
   ],
   "next_cursor": null

@@ -478,3 +478,83 @@ def test_practice_validation(elif_client, can_client, manager_client):
     assert summary["practice_mode"] == "same"
     normal = next(s for s in manager_client.get("/api/v1/admin/sessions").json()["items"] if s["id"] == of)
     assert normal["practice_mode"] is None
+
+
+class _FakeHealth:
+    def __init__(self, status_code, body):
+        self.status_code, self._body = status_code, body
+
+    def json(self):
+        return self._body
+
+
+def _real_mode(monkeypatch, health):
+    """Gerçek model modunu, model servisinin /v1/health cevabını taklit ederek kurar."""
+    import httpx
+
+    from app.core.config import get_settings
+    from app.services import capabilities
+
+    monkeypatch.setattr(get_settings(), "model_mode", "real")
+    capabilities.clear_cache()
+
+    def fake_get(url, timeout):
+        if health is None:
+            raise httpx.ConnectError("bağlantı reddedildi")
+        return _FakeHealth(200, health)
+
+    monkeypatch.setattr(capabilities.httpx, "get", fake_get)
+
+
+def test_health_reports_audio_input_in_stub(anon_client):
+    res = anon_client.get("/api/v1/health").json()
+    assert_contract("Health", res)
+    assert res["audio_input"] is True and res["model_service"] == "stub"
+
+
+def test_text_only_setup_rejects_audio_but_accepts_text(elif_client, monkeypatch):
+    session = _start(elif_client)["session"]  # stub modda başlat (açılış işi yok)
+    _real_mode(monkeypatch, {"status": "ok", "model": "gemma4-e2b-text", "runtime": "ollama", "audio_input": False})
+    health = elif_client.get("/api/v1/health").json()
+    assert_contract("Health", health)
+    assert health == {**health, "model_service": "up", "audio_input": False}
+
+    res = _upload(elif_client, session["id"])
+    assert res.status_code == 422
+    assert_contract("Error", res.json())
+    assert res.json()["error"]["code"] == "audio_unsupported"
+    text = elif_client.post(f"/api/v1/sessions/{session['id']}/messages", headers=CSRF,
+                            json={"text": "Merhaba, yardımcı olayım.", "client_request_id": str(uuid.uuid4())})
+    assert text.status_code == 202
+
+
+def test_old_model_service_without_flag_means_no_audio(elif_client, monkeypatch):
+    session = _start(elif_client)["session"]
+    _real_mode(monkeypatch, {"status": "ok", "model": "x", "runtime": "mlx"})
+    assert elif_client.get("/api/v1/health").json()["audio_input"] is False
+    assert _upload(elif_client, session["id"]).json()["error"]["code"] == "audio_unsupported"
+
+
+def test_audio_upload_accepted_when_model_service_down(elif_client, monkeypatch):
+    """Servis kapalıyken 'desteklenmiyor' demek yanlış olur; kayıt saklanır, iş sonra tekrar denenir."""
+    session = _start(elif_client)["session"]
+    _real_mode(monkeypatch, None)
+    health = elif_client.get("/api/v1/health").json()
+    assert health["model_service"] == "down" and health["audio_input"] is False
+    assert _upload(elif_client, session["id"]).status_code == 202
+
+
+class AudioRejectingModel(StubModelClient):
+    def transcribe(self, wav, prompt):
+        from app.services.model_client import ModelRejected
+
+        raise ModelRejected("Bu yerel Ollama kurulumu yalnız yazılı prova destekler.")
+
+
+def test_worker_maps_model_422_to_audio_unsupported(elif_client):
+    session = _start(elif_client)["session"]
+    job_id = _upload(elif_client, session["id"]).json()["job_id"]
+    run_once(model=AudioRejectingModel())
+    job = elif_client.get(f"/api/v1/jobs/{job_id}").json()
+    assert_contract("Job", job)
+    assert job["error"]["code"] == "audio_unsupported" and job["error"]["retryable"] is False

@@ -32,6 +32,8 @@ export interface Health {
   status: "ok" | "degraded";
   version: string;
   model_service: "up" | "down" | "stub";
+  /** Kurulum sesli cevabı destekliyor mu; false ise yalnız yazılı cevap (ör. Windows'ta Ollama). */
+  audio_input: boolean;
   tts_provider: string | null;
 }
 

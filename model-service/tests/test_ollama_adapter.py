@@ -34,3 +34,19 @@ def test_audio_is_rejected_instead_of_silently_dropped():
     with pytest.raises(ValueError, match="yazılı"):
         adapter.generate([{"role": "user", "content": [{"type": "audio", "audio": "test.wav"}]}], 20, None)
     adapter._http.close()
+
+
+def test_health_reports_audio_capability_per_runtime():
+    from fastapi.testclient import TestClient
+
+    import app.main as main
+
+    class Ready:
+        model_id, runtime, device, ready = "m", "mlx", "mps", True
+        supports_audio = True
+
+    main.adapter = Ready()
+    main.RUNTIME = "mlx"
+    assert TestClient(main.app).get("/v1/health").json()["audio_input"] is True
+    Ready.supports_audio = False
+    assert TestClient(main.app).get("/v1/health").json()["audio_input"] is False

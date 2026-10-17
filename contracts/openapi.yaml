@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: ProvaMüşteri API
-  version: 0.2.0
+  version: 0.2.1
   description: |
     Sesli müşteri provası ve yönetici inceleme platformu. Bu dosya frontend ile backend
     arasındaki tek otoritedir; değişiklikler `contracts/README.md` kurallarına göre yapılır.
@@ -227,6 +227,7 @@ paths:
         - Aynı `client_request_id` tekrar gönderilirse aynı `job_id` döner (ses tekrar işlenmez).
         - Limitler: en fazla 10 MB ve 30 sn (Gemma 4 ses girişi sınırı); en az 0,5 sn. İstemci 30 sn'de kaydı otomatik durdurmalı.
         - Kayıtta en az 0,3 sn konuşma algılanmazsa 422 `no_speech` döner (sessiz kayıtta ASR metin uyduruyor).
+        - Kurulum sesi desteklemiyorsa (`/health` → `audio_input: false`) 422 `audio_unsupported`; çalışan yazarak cevap verir.
           ASR sonucu anlaşılamazsa iş `error.code = no_speech`, `retryable = false` ile biter; kullanıcı yeniden kaydeder.
       parameters:
         - $ref: "#/components/parameters/SessionId"
@@ -901,6 +902,7 @@ components:
         - audio_undecodable
         - no_speech
         - image_undecodable
+        - audio_unsupported
         - validation_error
         - rate_limited
         - model_unavailable
@@ -908,9 +910,14 @@ components:
 
     Health:
       type: object
-      required: [status, version, model_service]
+      required: [status, version, model_service, audio_input]
       properties:
         status: { type: string, enum: [ok, degraded] }
+        audio_input:
+          type: boolean
+          description: |
+            Bu kurulum sesli cevabı (ASR) destekliyor mu. false ise UI mikrofon düğmesini göstermez,
+            yalnız yazılı cevap sunar (ör. Windows'ta yerel Ollama). Model servisine ulaşılamıyorsa false.
         version: { type: string }
         model_service:
           type: string
