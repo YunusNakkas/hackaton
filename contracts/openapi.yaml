@@ -239,6 +239,33 @@ paths:
         "415": { $ref: "#/components/responses/UnsupportedMediaType" }
         "422": { $ref: "#/components/responses/ValidationError" }
 
+  /sessions/{sessionId}/messages:
+    post:
+      tags: [sessions]
+      operationId: submitMessage
+      description: |
+        Çalışanın yazdığı cevabı kabul eder. Ses kaydı ve ASR yoktur; müşteri cevabı
+        aynı tur işiyle üretilir. Aynı `client_request_id` aynı işi döndürür.
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SubmitMessageRequest" }
+      responses:
+        "202":
+          description: Mesaj kabul edildi, müşteri cevabı kuyrukta
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TurnAccepted" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
   /sessions/{sessionId}/turns/{turnId}/audio:
     get:
       tags: [sessions]
@@ -1048,6 +1075,13 @@ components:
           type: integer
           minimum: 0
           description: İstemcinin ölçtüğü süre; yalnız teşhis içindir, sunucu kendi ölçer.
+    SubmitMessageRequest:
+      type: object
+      required: [text, client_request_id]
+      additionalProperties: false
+      properties:
+        text: { type: string, minLength: 1, maxLength: 1000 }
+        client_request_id: { type: string, format: uuid }
     TurnAccepted:
       type: object
       required: [job_id, employee_turn_id]

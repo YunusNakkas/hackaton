@@ -11,6 +11,7 @@ from typing import Any, Protocol
 import httpx
 
 from app.core.config import Settings
+from app.services import demo_customer
 
 
 class ModelUnavailable(Exception):
@@ -58,15 +59,16 @@ class HttpModelClient:
                                "sampling": sampling, "priority": priority})
 
 
+def _last_employee_text(messages: list[dict[str, Any]]) -> str:
+    for message in reversed(messages):
+        if message.get("role") == "user" and isinstance(message.get("content"), str):
+            return message["content"]
+    return ""
+
+
 class StubModelClient:
     model_name = "stub"
     runtime = "stub"
-
-    _REPLIES = [
-        "Anladım, peki bu durumda ne yapabilirsiniz?",
-        "Bu bana pek yeterli gelmedi, başka bir seçenek var mı?",
-        "Tamam, teşekkür ederim. Sonraki adım nedir?",
-    ]
 
     def __init__(self) -> None:
         self._n = 0
@@ -77,8 +79,9 @@ class StubModelClient:
 
     def chat(self, messages, *, max_new_tokens, temperature, purpose, stub_context=None) -> str:
         if purpose == "customer_reply":
-            self._n += 1
-            return self._REPLIES[self._n % len(self._REPLIES)]
+            ctx = stub_context or {}
+            said = ctx.get("employee_text") or _last_employee_text(messages)
+            return demo_customer.reply(ctx.get("scenario") or {}, said, ctx.get("history") or [])
         if purpose in ("evaluation", "evaluation_repair"):
             return json.dumps(_stub_evaluation(stub_context or {}), ensure_ascii=False)
         if purpose in ("draft", "draft_repair"):

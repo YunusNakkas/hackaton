@@ -51,6 +51,41 @@ def test_pagination_cursor(elif_client):
     assert not {t["id"] for t in first["items"]} & {t["id"] for t in second["items"]}
 
 
+def test_text_message_skips_asr_and_gets_a_reply(elif_client):
+    created = _start(elif_client)
+    session_id = created["session"]["id"]
+    text = "Kart ekstresiyle kaydı bulup iadeyi karta yapabiliriz."
+    res = elif_client.post(f"/api/v1/sessions/{session_id}/messages", headers=CSRF, json={
+        "text": f"  {text}  ", "client_request_id": str(uuid.uuid4())})
+    assert res.status_code == 202, res.text
+    assert_contract("TurnAccepted", res.json())
+    assert run_once()
+    job = elif_client.get(f"/api/v1/jobs/{res.json()['job_id']}").json()
+    assert job["status"] == "ready", job
+    assert job["result"]["employee_turn"]["text"] == text
+    assert job["result"]["employee_turn"]["has_audio"] is False
+    assert job["result"]["customer_turn"]["text"]
+    assert job["result"]["customer_turn"]["has_audio"] is False
+
+
+def test_stub_reply_follows_the_scenario_and_the_sentence(elif_client):
+    session_id = _start(elif_client)["session"]["id"]
+    off_topic = "Geç geldiğiniz için sistem rezervasyonunuzu iptal etmiş."
+    waiting = "Hemen kontrol ediyorum, bir saniye bakacağım."
+    first = elif_client.post(f"/api/v1/sessions/{session_id}/messages", headers=CSRF, json={
+        "text": off_topic, "client_request_id": str(uuid.uuid4())})
+    assert run_once()
+    pulled_back = elif_client.get(f"/api/v1/jobs/{first.json()['job_id']}").json()["result"]["customer_turn"]["text"]
+    assert "mont" in pulled_back.lower()
+    assert "teşekkür ederim" not in pulled_back.lower()
+    second = elif_client.post(f"/api/v1/sessions/{session_id}/messages", headers=CSRF, json={
+        "text": waiting, "client_request_id": str(uuid.uuid4())})
+    assert run_once()
+    reply = elif_client.get(f"/api/v1/jobs/{second.json()['job_id']}").json()["result"]["customer_turn"]["text"]
+    assert "kart" in reply.lower()
+    assert reply != pulled_back
+
+
 def test_full_voice_turn_and_evaluation_flow(elif_client):
     created = _start(elif_client)
     assert_contract("CreateSessionResponse", created)

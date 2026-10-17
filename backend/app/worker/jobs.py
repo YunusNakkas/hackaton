@@ -99,6 +99,11 @@ def process_turn(db: Session, job: Job, settings: Settings, model: ModelClient) 
     t = db.get(Training, s.training_id)
     state = dict(job.state or {})
 
+    if "asr_text" not in state and turn.text and not turn.audio_path:
+        state["asr_text"] = turn.text
+        job.state = state
+        db.commit()
+
     if "asr_text" not in state:
         _stage(db, job, "transcribing")
         wav = _media(settings, Path(turn.audio_path).parent / f"{turn.id}.16k.wav").read_bytes()
@@ -115,12 +120,15 @@ def process_turn(db: Session, job: Job, settings: Settings, model: ModelClient) 
         _stage(db, job, "generating")
         history = [(x.speaker, x.text) for x in _ready_history(db, s.id, turn.index)]
         messages = prompts.customer_messages(t.scenario, t.policies, [*history, ("employee", turn.text)])
-        reply, ended = clean_reply(model.chat(messages, max_new_tokens=120, temperature=1.0, purpose="customer_reply"))
+        stub_ctx = {"scenario": t.scenario, "employee_text": turn.text or "", "history": history}
+        reply, ended = clean_reply(model.chat(
+            messages, max_new_tokens=120, temperature=1.0, purpose="customer_reply", stub_context=stub_ctx))
         if not reply or looks_out_of_role(reply, t.scenario["customer"]["name"]):
             log.warning("müşteri cevabı rol dışı, tekrar üretiliyor: %r", reply[:120])
             state["out_of_role"] = [reply]
             retry = [{**messages[0], "content": messages[0]["content"] + "\n\n" + prompts.ROLE_REMINDER}, *messages[1:]]
-            reply, ended = clean_reply(model.chat(retry, max_new_tokens=120, temperature=1.0, purpose="customer_reply"))
+            reply, ended = clean_reply(model.chat(
+                retry, max_new_tokens=120, temperature=1.0, purpose="customer_reply", stub_context=stub_ctx))
             if not reply or looks_out_of_role(reply, t.scenario["customer"]["name"]):
                 state["out_of_role"].append(reply)
                 reply, ended = FALLBACK_REPLY, False  # sabit, rolde kalan cümle; job.state'te iz bırakır
