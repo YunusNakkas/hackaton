@@ -81,7 +81,7 @@ export function TrainingPage() {
       >
         {start.isPending ? "Hazırlanıyor…" : "Provayı başlat"}
       </button>
-      <p className="mt-3 text-sm text-muted">Müşteri yazarak başlar. Sen de yazarak cevap verirsin.</p>
+      <p className="mt-3 text-sm text-muted">Müşteri konuşarak başlar. Sen konuşarak ya da yazarak cevap verirsin.</p>
     </div>
   );
 }

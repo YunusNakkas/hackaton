@@ -44,10 +44,10 @@ export function LoginPage() {
             Müşteriyle konuş. Sonra neyin tuttuğunu gör.
           </h1>
           <p className="mt-5 max-w-sm text-lg text-muted">
-            İşletmenin kendi kurallarıyla yazılı prova. Kayıt sende kalır, puan görüşmeden çıkar.
+            İşletmenin kendi kurallarıyla sesli ya da yazılı prova. Kayıt sende kalır, puan görüşmeden çıkar.
           </p>
         </div>
-        <p className="text-sm text-muted">Türkçe</p>
+        <p className="text-sm text-muted">Türkçe · ses en fazla 30 saniye</p>
       </section>
 
       <section className="flex min-h-screen items-center bg-card px-8 py-12 sm:px-14">
