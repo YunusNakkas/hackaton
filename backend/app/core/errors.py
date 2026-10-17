@@ -61,7 +61,9 @@ def install_error_handlers(app: FastAPI) -> None:
     async def _validation(request: Request, exc: RequestValidationError):
         fields = {}
         for e in exc.errors():
-            loc = [str(p) for p in e.get("loc", []) if p not in ("body", "query", "path", "form")]
+            loc = [str(p) for p in e.get("loc", [])]
+            if loc and loc[0] in ("body", "query", "path", "header", "cookie"):
+                loc = loc[1:]  # yalnız konum etiketini at; "form" gibi gerçek alan adları kalsın
             fields[".".join(loc) or "_"] = e.get("msg", "Geçersiz değer")
         return JSONResponse(
             _body(request, "validation_error", "Girdi doğrulanamadı.", {"fields": fields}),

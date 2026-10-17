@@ -85,3 +85,40 @@ def repair_messages(bad_output: str, problem: str) -> list[dict[str, Any]]:
         "İçeriği değiştirmeden yalnızca geçerli JSON olarak tekrar yaz, başka metin ekleme.\n\n" + bad_output
     )
     return [{"role": "user", "content": prompt}]
+
+
+DRAFT_VERSION = "draft@1"
+
+
+def draft_messages(form: dict[str, Any], policies: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Yöneticinin formundan senaryo + rubrik üretimi. Politikalar kimlikleriyle verilir, değiştirilmez."""
+    policy_txt = "\n".join(f"[{p['id']}] {p['title']}: {p['body']}" for p in policies)
+    bullets = lambda xs: "\n".join(f"- {x}" for x in xs) or "- (belirtilmedi)"  # noqa: E731
+    prompt = f"""Bir işletme için müşteri hizmetleri prova eğitimi hazırla.
+
+İşletme: {form['business_name']} (sektör: {form['sector']})
+
+Politikalar (kimlikleriyle; metinlerini DEĞİŞTİRME, yalnızca kimlikle atıf yap):
+{policy_txt}
+
+Prova edilecek müşteri durumları:
+{bullets(form['customer_situations'])}
+
+Çalışan şunları YAPMALI:
+{bullets(form['must_do'])}
+
+Çalışan şunları YAPMAMALI:
+{bullets(form['must_not_do'])}
+
+Yöneticiye aktarma kuralı: {form.get('escalation_rule') or '(belirtilmedi)'}
+
+Görev: tam olarak {form['scenario_count']} senaryo ve bir değerlendirme rubriği üret.
+- Her senaryoda müşteri gerçekçi bir kişi olsun; hidden_goal müşterinin gizli beklentisidir.
+- opening_line müşterinin ilk cümlesidir (1-2 cümle, doğal Türkçe).
+- visible_policy_ids: müşterinin bilebileceği (ör. ilan edilmiş) politikaların kimlikleri; iç kurallar olmasın.
+- success_criteria çalışanın yapması gerekenler; politikalara ve "yapmalı/yapmamalı" listelerine dayansın.
+- difficulty: easy, medium veya hard. max_turns: 4-12. key: küçük harf, rakam ve alt çizgi.
+- Rubrik 3-5 boyut olsun; her boyutun 0'dan 4'e tam olarak 5 seviye tanımı olsun (levels dizisi, index = puan).
+Türkçe yaz. YALNIZCA şu şekilde JSON döndür, başka metin yazma:
+{{"scenarios":[{{"key":"...","title":"...","difficulty":"medium","summary":"...","customer":{{"name":"...","context":"...","mood":"...","hidden_goal":"..."}},"opening_line":"...","success_criteria":["..."],"visible_policy_ids":["policy_1"],"max_turns":8}}],"rubric":{{"dimensions":[{{"id":"empathy","name":"Empati","description":"...","levels":["0: ...","1: ...","2: ...","3: ...","4: ..."],"weight":1}}]}}}}"""
+    return [{"role": "user", "content": prompt}]

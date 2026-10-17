@@ -135,3 +135,64 @@ def paginate(db: Session, stmt: Select, id_col, cursor: str | None, limit: int, 
     rows = rows[:limit]
     next_cursor = encode_cursor(rows[-1][0].id) if has_more and rows else None
     return rows, next_cursor
+
+
+# ---------------------------------------------------------------- yönetici
+
+def review_json(db: Session, r) -> dict[str, Any]:
+    reviewer = db.get(User, r.reviewer_id)
+    return {"id": r.id, "reviewer": {"id": reviewer.id, "display_name": reviewer.display_name},
+            "decision": r.decision, "adjustments": r.adjustments, "comment": r.comment,
+            "created_at": iso(r.created_at)}
+
+
+def latest_review(db: Session, session_id: str):
+    from app.models import Review
+
+    return db.query(Review).filter_by(session_id=session_id).order_by(Review.id.desc()).first()
+
+
+def effective_total(db: Session, s: PracticeSession) -> dict[str, Any] | None:
+    from app.models import Evaluation
+    from app.services.evaluation import apply_review
+
+    ev = db.get(Evaluation, s.id)
+    if ev is None or ev.report is None:
+        return None
+    r = latest_review(db, s.id)
+    t = db.get(Training, s.training_id)
+    return apply_review(ev.report, review_json(db, r) if r else None, t.rubric)["effective_total"]
+
+
+def session_summary(db: Session, s: PracticeSession) -> dict[str, Any]:
+    ev_status, review_status = evaluation_state(db, s)
+    emp = db.get(User, s.employee_id)
+    turns = db.query(Turn).filter_by(session_id=s.id, speaker="employee", status="ready").count()
+    return {
+        "id": s.id, "training": training_summary(db.get(Training, s.training_id)),
+        "employee": {"id": emp.id, "display_name": emp.display_name},
+        "status": s.status, "evaluation_status": ev_status, "review_status": review_status,
+        "total": effective_total(db, s), "employee_turn_count": turns,
+        "started_at": iso(s.started_at), "finished_at": iso(s.finished_at),
+    }
+
+
+def employee_json(db: Session, u: User) -> dict[str, Any]:
+    open_count = (db.query(Assignment)
+                  .filter(Assignment.employee_id == u.id, Assignment.status.in_(("assigned", "in_progress"))).count())
+    finished = db.query(PracticeSession).filter_by(employee_id=u.id, status="finished")
+    last = db.query(PracticeSession.started_at).filter_by(employee_id=u.id).order_by(PracticeSession.id.desc()).first()
+    return {
+        "id": u.id, "email": u.email, "display_name": u.display_name, "active": u.active,
+        "created_at": iso(u.created_at), "open_assignments": open_count,
+        "completed_sessions": finished.count(), "last_session_at": iso(last[0]) if last else None,
+    }
+
+
+def draft_json(d) -> dict[str, Any]:
+    return {
+        "id": d.id, "status": d.status, "version": d.version, "form": d.form, "content": d.content,
+        "generation_job_id": d.generation_job_id, "warnings": d.warnings or [],
+        "created_at": iso(d.created_at), "updated_at": iso(d.updated_at),
+        "published_training_ids": d.published_training_ids or [],
+    }

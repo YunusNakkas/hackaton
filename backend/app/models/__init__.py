@@ -151,3 +151,21 @@ class Review(Base):
     adjustments: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
     comment: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = _created()
+
+
+class TrainingDraft(Base):
+    """Yöneticinin formundan Gemma ile üretilen, düzenlenip yayımlanan eğitim taslağı."""
+
+    __tablename__ = "training_drafts"
+    id: Mapped[str] = _id()
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), index=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    status: Mapped[str] = mapped_column(String(16), default="generating")  # generating|ready|error|published
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    form: Mapped[dict[str, Any]] = mapped_column(JSON)
+    content: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    warnings: Mapped[list[str]] = mapped_column(JSON, default=list)
+    generation_job_id: Mapped[str | None] = mapped_column(String(26))
+    published_training_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

@@ -19,5 +19,9 @@
   "admin.sessions.json": "SessionSummaryPage",
   "admin.review.created.json": "ManagerReview",
   "errors.turn_in_progress.json": "Error",
-  "errors.validation.json": "Error"
+  "errors.validation.json": "Error",
+  "admin.employee_detail.json": "EmployeeDetail",
+  "admin.training_draft.generating.json": "TrainingDraft",
+  "admin.training_draft.ready.json": "TrainingDraft",
+  "evaluation.ready.json": "EvaluationEnvelope"
 }

@@ -81,6 +81,8 @@ class StubModelClient:
             return self._REPLIES[self._n % len(self._REPLIES)]
         if purpose in ("evaluation", "evaluation_repair"):
             return json.dumps(_stub_evaluation(stub_context or {}), ensure_ascii=False)
+        if purpose in ("draft", "draft_repair"):
+            return json.dumps(_stub_draft(stub_context or {}), ensure_ascii=False)
         raise ValueError(f"stub bilinmeyen amaç: {purpose}")
 
 
@@ -99,6 +101,24 @@ def _stub_evaluation(ctx: dict[str, Any]) -> dict[str, Any]:
         "practice_drill": {"title": "[stub] Tekrar egzersizi", "instructions": "Aynı senaryoyu tekrar deneyin.",
                            "focus_dimension_ids": ctx.get("dimension_ids", [])[:1], "example_phrases": []},
     }
+
+
+def _stub_draft(ctx: dict[str, Any]) -> dict[str, Any]:
+    form = ctx.get("form", {})
+    situations = form.get("customer_situations") or ["Genel müşteri talebi"]
+    policy_ids = [p["id"] for p in ctx.get("policies", [])]
+    scenarios = [{
+        "key": f"stub_senaryo_{i + 1}", "title": f"[stub] {situations[i % len(situations)]}",
+        "difficulty": "medium", "summary": f"[stub] {situations[i % len(situations)]}",
+        "customer": {"name": "Örnek Müşteri", "context": "[stub] bağlam", "mood": "sabırsız",
+                     "hidden_goal": "[stub] hızlı çözüm"},
+        "opening_line": "Merhaba, bir sorunum var.", "success_criteria": ["Politikayı doğru aktarmak"],
+        "visible_policy_ids": policy_ids[:1], "max_turns": 6,
+    } for i in range(form.get("scenario_count", 1))]
+    levels = [f"{n}: [stub] seviye" for n in range(5)]
+    dims = [{"id": d, "name": d, "description": "[stub]", "levels": levels, "weight": 1}
+            for d in ("empathy", "policy_accuracy", "solution")]
+    return {"scenarios": scenarios, "rubric": {"dimensions": dims}}
 
 
 _stub_singleton: StubModelClient | None = None

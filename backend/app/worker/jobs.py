@@ -16,7 +16,8 @@ from app import schemas
 from app.core.config import Settings, get_settings
 from app.core.ids import iso, utcnow
 from app.db import get_sessionmaker
-from app.models import Evaluation, Job, PracticeSession, Training, Turn
+from app.models import Evaluation, Job, PracticeSession, Training, TrainingDraft, Turn
+from app.services import drafts as draftsvc
 from app.services import evaluation as evalsvc
 from app.services import prompts, tts
 from app.services.model_client import ModelClient, ModelUnavailable, get_model_client
@@ -164,8 +165,34 @@ def process_evaluation(db: Session, job: Job, settings: Settings, model: ModelCl
     return {"kind": "evaluation", "session_id": s.id, "evaluation_status": status}
 
 
-HANDLERS = {"opening": process_opening, "turn": process_turn, "evaluation": process_evaluation}
-FIRST_STAGE = {"opening": "synthesizing", "turn": "transcribing", "evaluation": "evaluating"}
+def process_draft(db: Session, job: Job, settings: Settings, model: ModelClient) -> dict:
+    draft = db.get(TrainingDraft, job.state["draft_id"])
+    _stage(db, job, "generating")
+    policies = draftsvc.form_policies(draft.form)
+    ctx = {"form": draft.form, "policies": policies}
+    raw = model.chat(prompts.draft_messages(draft.form, policies), max_new_tokens=2000, temperature=1.0,
+                     purpose="draft", stub_context=ctx)
+    try:
+        part = draftsvc.GeneratedPart.model_validate(evalsvc.parse_json_output(raw))
+    except (evalsvc.EvaluationShapeError, draftsvc.ValidationError) as first:
+        problem = draftsvc.validation_problem(first) if isinstance(first, draftsvc.ValidationError) else str(first)
+        raw = model.chat(prompts.repair_messages(raw, problem), max_new_tokens=2000, temperature=0.2,
+                         purpose="draft_repair", stub_context=ctx)
+        try:
+            part = draftsvc.GeneratedPart.model_validate(evalsvc.parse_json_output(raw))
+        except (evalsvc.EvaluationShapeError, draftsvc.ValidationError) as second:
+            log.warning("taslak şeması onarılamadı: %s", second)
+            raise JobFailed("internal_error", "Taslak üretilemedi. Tekrar deneyebilirsiniz.", True) from second
+    content = {"scenarios": [s.model_dump() for s in part.scenarios], "policies": policies,
+               "rubric": part.rubric.model_dump()}
+    draft.content, draft.warnings, draft.status = content, draftsvc.warnings_for(content), "ready"
+    return {"kind": "draft_generation", "draft_id": draft.id}
+
+
+HANDLERS = {"opening": process_opening, "turn": process_turn, "evaluation": process_evaluation,
+            "draft_generation": process_draft}
+FIRST_STAGE = {"opening": "synthesizing", "turn": "transcribing", "evaluation": "evaluating",
+               "draft_generation": "generating"}
 
 
 def _fail(db: Session, job: Job, exc: JobFailed) -> None:
@@ -179,6 +206,8 @@ def _fail(db: Session, job: Job, exc: JobFailed) -> None:
     if job.kind == "evaluation":
         ev = db.get(Evaluation, job.session_id)
         ev.status, ev.error = "error", job.error
+    if job.kind == "draft_generation":
+        db.get(TrainingDraft, job.state["draft_id"]).status = "error"
     db.commit()
 
 

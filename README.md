@@ -2,7 +2,7 @@
 
 İşletmelerin kendi politika ve ölçütleriyle çalışan sesli müşteri provası ve yönetici inceleme platformu.
 
-> Durum: çalışan akışı backend'de uçtan uca çalışıyor (giriş → sesli tur → değerlendirme). Admin uçları ve taslak üretimi henüz yok.
+> Durum: backend P0 uçlarının tamamı çalışıyor: çalışan akışı (giriş → sesli tur → değerlendirme) ve yönetici paneli (özet, çalışanlar, inceleme, atama, Gemma ile taslak). Frontend geliştiriliyor.
 
 ## Dizinler
 
@@ -55,7 +55,7 @@ python3.12 -m venv .venv-mlx && .venv-mlx/bin/pip install -e ".[mlx]"
 
 Mac'te Gemma 4 E4B 4-bit (MLX, ~5,4 GB) kullanılır; NVIDIA için `model-service/README.md`. Ölçümler: `docs/s0-spike.md`.
 
-Uçtan uca duman testi (geçici veritabanı kullanır): `backend/.venv/bin/python eval/e2e_real.py`
+Gerçek modelle duman testleri (geçici veritabanı kullanır): `backend/.venv/bin/python eval/e2e_real.py` (sesli oturum), `eval/draft_real.py` (taslak üretimi)
 
 ### Frontend için
 

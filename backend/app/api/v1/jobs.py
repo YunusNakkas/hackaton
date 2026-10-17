@@ -5,7 +5,7 @@ from app import schemas
 from app.core.errors import conflict, not_found
 from app.core.security import current_user
 from app.db import get_db
-from app.models import Evaluation, Job, Turn, User
+from app.models import Evaluation, Job, TrainingDraft, Turn, User
 
 router = APIRouter(tags=["jobs"])
 
@@ -39,6 +39,8 @@ def retry_job(job_id: str, user: User = Depends(current_user), db: Session = Dep
     if j.kind == "evaluation":
         ev = db.get(Evaluation, j.session_id)
         ev.status, ev.error = "pending", None
+    if j.kind == "draft_generation":
+        db.get(TrainingDraft, j.state["draft_id"]).status = "generating"
     j.status, j.error, j.attempt = "queued", None, j.attempt + 1
     db.commit()
     return schemas.job_json(j)

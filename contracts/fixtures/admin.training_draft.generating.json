@@ -1,0 +1,38 @@
+{
+  "id": "01M55SP6ZHT2B9MKZ079AB1JC8",
+  "status": "generating",
+  "version": 1,
+  "form": {
+    "business_name": "Kahve Durağı",
+    "sector": "cafe",
+    "language": "tr",
+    "policies": [
+      {
+        "title": "İade",
+        "body": "Yanlış hazırlanan içecek ücretsiz yeniden yapılır."
+      },
+      {
+        "title": "Sadakat",
+        "body": "10 kahvede 1 kahve bedava."
+      }
+    ],
+    "customer_situations": [
+      "Siparişi yanlış hazırlanan müşteri",
+      "Kampanyayı soran müşteri"
+    ],
+    "must_do": [
+      "Özür dile"
+    ],
+    "must_not_do": [
+      "Para iadesi vaat etme"
+    ],
+    "escalation_rule": null,
+    "scenario_count": 2
+  },
+  "content": null,
+  "generation_job_id": "01M55SP6ZHT2B9MKZ079AB1JC9",
+  "warnings": [],
+  "created_at": "2026-10-17T20:43:38.865715Z",
+  "updated_at": "2026-10-17T20:43:38.866024Z",
+  "published_training_ids": []
+}

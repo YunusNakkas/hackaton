@@ -1,0 +1,118 @@
+{
+  "session_id": "01M55SP6XP19XH4FZMM9728QYN",
+  "status": "ready",
+  "evaluation_job_id": "01M55SP6Z3Z2VAX137MXPQ5K40",
+  "report": {
+    "rubric_version": "customer_service.rubric@1",
+    "dimensions": [
+      {
+        "dimension_id": "empathy",
+        "name": "Empati",
+        "score": 2,
+        "max_score": 4,
+        "insufficient_evidence": false,
+        "rationale": "[stub] Örnek gerekçe.",
+        "evidence": [
+          {
+            "turn_id": "01M55SP6YWSAAGB07S221CM9Z0",
+            "speaker": "employee",
+            "quote": "[stub transkript] 2 saniyelik",
+            "verified": true
+          }
+        ],
+        "policy_refs": []
+      },
+      {
+        "dimension_id": "policy_accuracy",
+        "name": "Politika doğruluğu",
+        "score": 2,
+        "max_score": 4,
+        "insufficient_evidence": false,
+        "rationale": "[stub] Örnek gerekçe.",
+        "evidence": [
+          {
+            "turn_id": "01M55SP6YWSAAGB07S221CM9Z0",
+            "speaker": "employee",
+            "quote": "[stub transkript] 2 saniyelik",
+            "verified": true
+          }
+        ],
+        "policy_refs": []
+      },
+      {
+        "dimension_id": "solution",
+        "name": "Çözüm odaklılık",
+        "score": 2,
+        "max_score": 4,
+        "insufficient_evidence": false,
+        "rationale": "[stub] Örnek gerekçe.",
+        "evidence": [
+          {
+            "turn_id": "01M55SP6YWSAAGB07S221CM9Z0",
+            "speaker": "employee",
+            "quote": "[stub transkript] 2 saniyelik",
+            "verified": true
+          }
+        ],
+        "policy_refs": []
+      },
+      {
+        "dimension_id": "clarity",
+        "name": "İletişim netliği",
+        "score": 2,
+        "max_score": 4,
+        "insufficient_evidence": false,
+        "rationale": "[stub] Örnek gerekçe.",
+        "evidence": [
+          {
+            "turn_id": "01M55SP6YWSAAGB07S221CM9Z0",
+            "speaker": "employee",
+            "quote": "[stub transkript] 2 saniyelik",
+            "verified": true
+          }
+        ],
+        "policy_refs": []
+      }
+    ],
+    "total": {
+      "score": 8.0,
+      "max_score": 16.0,
+      "complete": true,
+      "scored_dimensions": 4,
+      "total_dimensions": 4
+    },
+    "strengths": [
+      "[stub] Örnek güçlü yön."
+    ],
+    "improvements": [
+      "[stub] Örnek gelişim alanı."
+    ],
+    "practice_drill": {
+      "title": "[stub] Tekrar egzersizi",
+      "instructions": "Aynı senaryoyu tekrar deneyin.",
+      "focus_dimension_ids": [
+        "empathy"
+      ],
+      "example_phrases": []
+    },
+    "flags": [
+      "short_session"
+    ],
+    "model_run": {
+      "model": "stub",
+      "runtime": "stub",
+      "prompt_version": "evaluator@1",
+      "generated_at": "2026-10-17T20:43:38.854017Z",
+      "repaired": false
+    },
+    "manager_review": null,
+    "effective_total": {
+      "score": 8.0,
+      "max_score": 16.0,
+      "complete": true,
+      "scored_dimensions": 4,
+      "total_dimensions": 4
+    }
+  },
+  "error": null
+}

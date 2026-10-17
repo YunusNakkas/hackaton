@@ -1,0 +1,136 @@
+{
+  "id": "01M55SP6ZHT2B9MKZ079AB1JC8",
+  "status": "ready",
+  "version": 1,
+  "form": {
+    "business_name": "Kahve Durağı",
+    "sector": "cafe",
+    "language": "tr",
+    "policies": [
+      {
+        "title": "İade",
+        "body": "Yanlış hazırlanan içecek ücretsiz yeniden yapılır."
+      },
+      {
+        "title": "Sadakat",
+        "body": "10 kahvede 1 kahve bedava."
+      }
+    ],
+    "customer_situations": [
+      "Siparişi yanlış hazırlanan müşteri",
+      "Kampanyayı soran müşteri"
+    ],
+    "must_do": [
+      "Özür dile"
+    ],
+    "must_not_do": [
+      "Para iadesi vaat etme"
+    ],
+    "escalation_rule": null,
+    "scenario_count": 2
+  },
+  "content": {
+    "scenarios": [
+      {
+        "key": "stub_senaryo_1",
+        "title": "[stub] Siparişi yanlış hazırlanan müşteri",
+        "difficulty": "medium",
+        "summary": "[stub] Siparişi yanlış hazırlanan müşteri",
+        "customer": {
+          "name": "Örnek Müşteri",
+          "context": "[stub] bağlam",
+          "mood": "sabırsız",
+          "hidden_goal": "[stub] hızlı çözüm"
+        },
+        "opening_line": "Merhaba, bir sorunum var.",
+        "success_criteria": [
+          "Politikayı doğru aktarmak"
+        ],
+        "visible_policy_ids": [
+          "policy_1"
+        ],
+        "max_turns": 6
+      },
+      {
+        "key": "stub_senaryo_2",
+        "title": "[stub] Kampanyayı soran müşteri",
+        "difficulty": "medium",
+        "summary": "[stub] Kampanyayı soran müşteri",
+        "customer": {
+          "name": "Örnek Müşteri",
+          "context": "[stub] bağlam",
+          "mood": "sabırsız",
+          "hidden_goal": "[stub] hızlı çözüm"
+        },
+        "opening_line": "Merhaba, bir sorunum var.",
+        "success_criteria": [
+          "Politikayı doğru aktarmak"
+        ],
+        "visible_policy_ids": [
+          "policy_1"
+        ],
+        "max_turns": 6
+      }
+    ],
+    "policies": [
+      {
+        "id": "policy_1",
+        "title": "İade",
+        "body": "Yanlış hazırlanan içecek ücretsiz yeniden yapılır."
+      },
+      {
+        "id": "policy_2",
+        "title": "Sadakat",
+        "body": "10 kahvede 1 kahve bedava."
+      }
+    ],
+    "rubric": {
+      "dimensions": [
+        {
+          "id": "empathy",
+          "name": "empathy",
+          "description": "[stub]",
+          "levels": [
+            "0: [stub] seviye",
+            "1: [stub] seviye",
+            "2: [stub] seviye",
+            "3: [stub] seviye",
+            "4: [stub] seviye"
+          ],
+          "weight": 1.0
+        },
+        {
+          "id": "policy_accuracy",
+          "name": "policy_accuracy",
+          "description": "[stub]",
+          "levels": [
+            "0: [stub] seviye",
+            "1: [stub] seviye",
+            "2: [stub] seviye",
+            "3: [stub] seviye",
+            "4: [stub] seviye"
+          ],
+          "weight": 1.0
+        },
+        {
+          "id": "solution",
+          "name": "solution",
+          "description": "[stub]",
+          "levels": [
+            "0: [stub] seviye",
+            "1: [stub] seviye",
+            "2: [stub] seviye",
+            "3: [stub] seviye",
+            "4: [stub] seviye"
+          ],
+          "weight": 1.0
+        }
+      ]
+    }
+  },
+  "generation_job_id": "01M55SP6ZHT2B9MKZ079AB1JC9",
+  "warnings": [],
+  "created_at": "2026-10-17T20:43:38.865715Z",
+  "updated_at": "2026-10-17T20:43:38.867921Z",
+  "published_training_ids": []
+}

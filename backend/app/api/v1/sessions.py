@@ -10,10 +10,10 @@ from sqlalchemy.orm import Session
 from app import schemas
 from app.core.config import get_settings
 from app.core.errors import ApiError, conflict, not_found
-from app.core.ids import iso, utcnow
+from app.core.ids import utcnow
 from app.core.security import current_user
 from app.db import get_db
-from app.models import Assignment, Evaluation, Job, PracticeSession, Review, Training, Turn, User
+from app.models import Assignment, Evaluation, Job, PracticeSession, Training, Turn, User
 from app.services import evaluation as evalsvc
 from app.services.audio import ALLOWED_MIME, base_mime, decode_to_wav, extension_for
 from app.services.prompts import CUSTOMER_VERSION
@@ -210,14 +210,8 @@ def get_evaluation(session_id: str, user: User = Depends(current_user), db: Sess
     report = None
     if ev.report is not None:
         t = db.get(Training, s.training_id)
-        latest = db.query(Review).filter_by(session_id=s.id).order_by(Review.id.desc()).first()
-        report = evalsvc.apply_review(ev.report, review_json(db, latest) if latest else None, t.rubric)
+        latest = schemas.latest_review(db, s.id)
+        report = evalsvc.apply_review(ev.report, schemas.review_json(db, latest) if latest else None, t.rubric)
     return {"session_id": s.id, "status": ev.status, "evaluation_job_id": ev.job_id,
             "report": report, "error": ev.error if ev.status == "error" else None}
 
-
-def review_json(db: Session, r: Review) -> dict:
-    reviewer = db.get(User, r.reviewer_id)
-    return {"id": r.id, "reviewer": {"id": reviewer.id, "display_name": reviewer.display_name},
-            "decision": r.decision, "adjustments": r.adjustments, "comment": r.comment,
-            "created_at": iso(r.created_at)}
