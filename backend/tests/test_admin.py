@@ -281,3 +281,40 @@ def test_other_org_isolated(manager_client, env):
     elif_id = next(e["id"] for e in manager_client.get("/api/v1/admin/employees").json()["items"]
                    if e["email"] == "elif@demo.test")
     assert rival.get(f"/api/v1/admin/employees/{elif_id}").status_code == 404
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("Politika_1'e uygun olarak yeniden yapmalı.", "'İade' politikasına uygun olarak yeniden yapmalı."),
+    ("Politika [policy_1]'e uygun olarak", "'İade' politikasına uygun olarak"),
+    ("Politika_2 uyarınca garanti yok.", "'Sadakat' politikası uyarınca garanti yok."),
+    ("policy_1'i doğru aktarmak", "'İade' politikasını doğru aktarmak"),
+    ("[policy_2]'den bahsetmek", "'Sadakat' politikasından bahsetmek"),
+    ("Politika 1'deki kurala göre", "'İade' politikasındaki kurala göre"),
+    ("Politika_9'a uymak", "ilgili politikaya uymak"),
+    ("Müşteriye politikayı anlatmak", "Müşteriye politikayı anlatmak"),
+])
+def test_policy_ids_replaced_with_titles_keeping_case(text, expected):
+    from app.services.drafts import _replace_policy_refs, form_policies
+
+    assert _replace_policy_refs(text, form_policies(FORM)) == expected
+
+
+def test_repair_generated_fixes_real_model_format_errors():
+    """eval/draft_bench.py'de görülen gerçek hatalar: Türkçe anahtar, sözlük seviye, fazla senaryo, sızan kimlik."""
+    from app.services.drafts import GeneratedPart, form_policies, repair_generated
+
+    scn = {"title": "T", "difficulty": "hard", "summary": "Politika_1'e uygun", "opening_line": "o",
+           "customer": {"name": "A", "context": "c", "mood": "m", "hidden_goal": "h"},
+           "success_criteria": ["a"], "visible_policy_ids": ["Politika_1", "policy 2", "policy_9"], "max_turns": 6}
+    raw = {"scenarios": [{**scn, "key": "reçete_sorunu"}, {**scn, "key": "reçete_sorunu"}, {**scn, "key": "x"}],
+           "rubric": {"dimensions": [{"id": "proaktif_çözüm", "name": "P", "description": "d", "weight": 1,
+                                      "levels": {"0": "a", "1": "b", "2": "c", "3": "d", "4": "e"}}]}}
+    fixed, warnings = repair_generated(raw, form_policies(FORM), requested=2)
+    part = GeneratedPart.model_validate(fixed)
+    assert [s.key for s in part.scenarios] == ["recete_sorunu", "recete_sorunu_2"]
+    assert part.rubric.dimensions[0].id == "proaktif_cozum" and part.rubric.dimensions[0].levels == list("abcde")
+    assert part.scenarios[0].summary == "'İade' politikasına uygun"
+    assert part.scenarios[0].visible_policy_ids == ["policy_1", "policy_2"]
+    assert warnings == ["2 senaryo istendi, model 3 üretti; fazlası çıkarıldı."]
+    _, few = repair_generated({"scenarios": [{**scn, "key": "a"}], "rubric": raw["rubric"]}, form_policies(FORM), 3)
+    assert few == ["3 senaryo istendi, model yalnızca 1 üretti."]

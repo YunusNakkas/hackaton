@@ -221,22 +221,29 @@ def process_draft(db: Session, job: Job, settings: Settings, model: ModelClient)
     _stage(db, job, "generating")
     policies = draftsvc.form_policies(draft.form)
     ctx = {"form": draft.form, "policies": policies}
+    requested = draft.form["scenario_count"]
+
+    def parse(text: str):
+        fixed, notes = draftsvc.repair_generated(evalsvc.parse_json_output(text), policies, requested)
+        return draftsvc.GeneratedPart.model_validate(fixed), notes
+
     raw = model.chat(prompts.draft_messages(draft.form, policies), max_new_tokens=2000, temperature=1.0,
                      purpose="draft", stub_context=ctx)
     try:
-        part = draftsvc.GeneratedPart.model_validate(evalsvc.parse_json_output(raw))
+        part, notes = parse(raw)
     except (evalsvc.EvaluationShapeError, draftsvc.ValidationError) as first:
         problem = draftsvc.validation_problem(first) if isinstance(first, draftsvc.ValidationError) else str(first)
         raw = model.chat(prompts.repair_messages(raw, problem), max_new_tokens=2000, temperature=0.2,
                          purpose="draft_repair", stub_context=ctx)
         try:
-            part = draftsvc.GeneratedPart.model_validate(evalsvc.parse_json_output(raw))
+            part, notes = parse(raw)
         except (evalsvc.EvaluationShapeError, draftsvc.ValidationError) as second:
             log.warning("taslak şeması onarılamadı: %s", second)
             raise JobFailed("internal_error", "Taslak üretilemedi. Tekrar deneyebilirsiniz.", True) from second
     content = {"scenarios": [s.model_dump() for s in part.scenarios], "policies": policies,
                "rubric": part.rubric.model_dump()}
-    draft.content, draft.warnings, draft.status = content, draftsvc.warnings_for(content), "ready"
+    draft.content, draft.status = content, "ready"
+    draft.warnings = notes + draftsvc.warnings_for(content)
     return {"kind": "draft_generation", "draft_id": draft.id}
 
 
