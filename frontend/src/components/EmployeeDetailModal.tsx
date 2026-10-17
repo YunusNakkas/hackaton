@@ -198,9 +198,9 @@ export function EmployeeDetailModal({
                               {s.total.score ?? "-"} / {s.total.max_score}
                             </p>
                           ) : (
-                            <span className="text-xs text-muted">Devam ediyor</span>
+                            <span className="block text-xs text-muted">Devam ediyor</span>
                           )}
-                          <span className="text-xs text-muted">İncele →</span>
+                          <span className="mt-0.5 block text-xs text-primary">İncele →</span>
                         </div>
                       </Link>
                     ))}

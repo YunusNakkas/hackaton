@@ -75,7 +75,7 @@ export function LoginPage() {
             Müşteriyle konuş. Gerçek kurallarla provayı tamamla.
           </h1>
           <p className="mt-6 text-base text-muted leading-relaxed">
-            İşletmenizin iade, değişim, karşılama ve problem çözme standartlarıyla yazılı prova yapın. Model görüşmenizi puanlar ve yönetici denetler.
+            İşletmenizin iade, değişim, karşılama ve problem çözme standartlarıyla mesajda veya telefonda prova yapın. Model görüşmenizi puanlar ve yönetici denetler.
           </p>
 
           <div className="mt-8 grid grid-cols-2 gap-4">
@@ -84,8 +84,8 @@ export function LoginPage() {
               <p className="text-xs text-muted mt-1">Mağaza ve Otel Senaryosu</p>
             </div>
             <div className="rounded-2xl border border-line bg-card/60 p-4">
-              <p className="font-serif text-2xl font-bold text-pine">Yazılı Prova</p>
-              <p className="text-xs text-muted mt-1">Mesajla Yanıt</p>
+              <p className="font-serif text-2xl font-bold text-pine">İki kanal</p>
+              <p className="text-xs text-muted mt-1">Mesaj ya da telefon</p>
             </div>
           </div>
         </div>

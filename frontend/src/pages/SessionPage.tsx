@@ -368,6 +368,7 @@ export function SessionPage() {
           onUpload={sendAudio}
           onHangup={() => void finish()}
           hangupDisabled={session.employee_turn_count === 0 || jobBusy || sending}
+          hangupLabel={session.employee_turn_count === 0 ? "Önce bir cevap ver" : "Aramayı kapat"}
         />
       )}
 
