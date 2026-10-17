@@ -5,23 +5,21 @@ import { api, isApiError } from "../api/client";
 import type { EvaluationEnvelope, Job, Session, TurnAccepted } from "../api/types";
 import { Clip } from "../components/Clip";
 import { ReportView } from "../components/ReportView";
-import { evaluationLabel, formatClock, jobLabel, speakerLabel } from "../lib/labels";
-import { extensionFor, recordOnce, supportedMime } from "../lib/recorder";
+import { evaluationLabel, jobLabel, speakerLabel } from "../lib/labels";
 
 const ACTIVE = new Set(["queued", "transcribing", "generating", "synthesizing", "evaluating"]);
 
 export function SessionPage() {
   const { sessionId = "" } = useParams();
   const queryClient = useQueryClient();
-  const bottom = useRef<HTMLDivElement>(null);
+  const thread = useRef<HTMLOListElement>(null);
   const seenAudio = useRef<Set<string> | null>(null);
   const [freshAudioId, setFreshAudioId] = useState<string | null>(null);
-  const [recording, setRecording] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
-  const stopRef = useRef<(() => void) | null>(null);
+  const [draft, setDraft] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [sending, setSending] = useState(false);
   const [shouldEnd, setShouldEnd] = useState(false);
+  const requestId = useRef<string | null>(null);
 
   const sessionQuery = useQuery({
     queryKey: ["session", sessionId],
@@ -78,6 +76,8 @@ export function SessionPage() {
 
   useEffect(() => {
     if (!session) return;
+    const box = thread.current;
+    if (box) box.scrollTop = box.scrollHeight;
     const playable = session.turns.filter((turn) => turn.speaker === "customer" && turn.has_audio).map((turn) => turn.id);
     if (seenAudio.current === null) {
       seenAudio.current = new Set(playable);
@@ -86,51 +86,27 @@ export function SessionPage() {
     const added = playable.find((id) => !seenAudio.current?.has(id));
     for (const id of playable) seenAudio.current.add(id);
     if (added) setFreshAudioId(added);
-    bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [session]);
 
-  async function send(blob: Blob, durationMs: number, clientRequestId: string) {
-    const body = new FormData();
-    const mime = blob.type || "audio/webm";
-    body.append("audio", blob, `cevap.${extensionFor(mime)}`);
-    body.append("client_request_id", clientRequestId);
-    body.append("client_duration_ms", String(durationMs));
-    await api<TurnAccepted>(`/sessions/${sessionId}/turns`, { method: "POST", body });
-    await queryClient.invalidateQueries({ queryKey: ["session", sessionId] });
-  }
-
-  async function startRecording() {
-    if (!supportedMime() && typeof MediaRecorder === "undefined") {
-      setNotice("Bu tarayıcı ses kaydını desteklemiyor.");
-      return;
-    }
+  async function sendMessage() {
+    const text = draft.trim();
+    if (!text || sending) return;
     setNotice(null);
-    setElapsed(0);
-    setRecording(true);
-    const handle = recordOnce(30_000, setElapsed);
-    stopRef.current = handle.stop;
+    const clientRequestId = requestId.current ?? crypto.randomUUID();
+    requestId.current = clientRequestId;
+    setSending(true);
     try {
-      const taken = await handle.done;
-      setRecording(false);
-      stopRef.current = null;
-      if (taken.durationMs < 500) {
-        setNotice("Biraz daha konuş. En az yarım saniye.");
-        return;
-      }
-      setUploading(true);
-      await send(taken.blob, taken.durationMs, crypto.randomUUID());
+      await api<TurnAccepted>(`/sessions/${sessionId}/messages`, {
+        method: "POST",
+        body: JSON.stringify({ text, client_request_id: clientRequestId }),
+      });
+      requestId.current = null;
+      setDraft("");
+      await queryClient.invalidateQueries({ queryKey: ["session", sessionId] });
     } catch (error) {
-      setRecording(false);
-      const denied = error instanceof DOMException && (error.name === "NotAllowedError" || error.name === "NotFoundError");
-      setNotice(
-        denied
-          ? "Mikrofona erişilemedi. Tarayıcı iznini kontrol et."
-          : isApiError(error)
-            ? error.message
-            : "Kayıt gönderilemedi.",
-      );
+      setNotice(isApiError(error) ? error.message : "Mesaj gönderilemedi.");
     } finally {
-      setUploading(false);
+      setSending(false);
     }
   }
 
@@ -169,10 +145,12 @@ export function SessionPage() {
   const finished = session.status === "finished";
   const evalStatus = evaluation.data?.status ?? session.evaluation_status;
   const atLimit = session.employee_turn_count >= session.max_turns;
-  const canTalk = !finished && !atLimit && !recording && !uploading && !jobBusy;
+  const canSend = !finished && !atLimit && !sending && !jobBusy;
 
   return (
-    <div className="mx-auto max-w-3xl pb-28">
+    <div
+      className={`mx-auto max-w-3xl ${finished ? "" : "flex h-[calc(100dvh-7.75rem)] flex-col"}`}
+    >
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <Link to="/" className="text-sm text-muted hover:text-ink">
@@ -188,7 +166,7 @@ export function SessionPage() {
           <button
             type="button"
             onClick={() => void finish()}
-            disabled={session.employee_turn_count === 0 || jobBusy || uploading || recording}
+            disabled={session.employee_turn_count === 0 || jobBusy || sending}
             className="rounded-full border border-ink px-4 py-2 text-sm disabled:opacity-40"
           >
             Bitir ve değerlendir
@@ -215,7 +193,10 @@ export function SessionPage() {
         </div>
       )}
 
-      <ol className={`space-y-4 ${finished ? "mt-10 border-t border-line pt-8" : "mt-8"}`}>
+      <ol
+        ref={thread}
+        className={`min-h-0 flex-1 space-y-4 overflow-y-auto ${finished ? "mt-10 border-t border-line pt-8" : "my-4"}`}
+      >
         {finished && <li className="text-sm text-muted">Konuşma</li>}
         {session.turns.map((turn) => (
           <li key={turn.id} className={turn.speaker === "employee" ? "flex justify-end" : ""}>
@@ -240,50 +221,60 @@ export function SessionPage() {
           </li>
         ))}
       </ol>
-      <div ref={bottom} />
-
       {!finished && (
-        <div className="fixed inset-x-0 bottom-0 border-t border-line bg-paper/95 backdrop-blur">
-          <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-4 px-5 py-4">
-            <button
-              type="button"
-              disabled={!canTalk && !recording}
-              onClick={() => {
-                if (recording) stopRef.current?.();
-                else void startRecording();
-              }}
-              className={`grid h-14 w-14 place-items-center rounded-full text-paper ${
-                recording ? "bg-accent" : "bg-ink disabled:opacity-40"
-              }`}
-              aria-label={recording ? "Kaydı bitir" : "Konuş"}
-            >
-              <span className={recording ? "h-3.5 w-3.5 rounded-sm bg-paper" : "h-3.5 w-3.5 rounded-full bg-accent"} />
-            </button>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm">
-                {recording
-                  ? `Kayıt ${formatClock(elapsed)} / 0:30`
-                  : uploading
-                    ? "Gönderiliyor…"
-                    : jobBusy && job
-                      ? jobLabel[job.status]
-                      : job?.status === "error"
-                        ? job.error?.message
-                        : shouldEnd
-                          ? "Müşteri konuşmayı kapattı. İstersen bitir."
-                          : atLimit
-                            ? "Tur doldu. Değerlendirme için bitir."
-                            : "Konuş, sonra düğmeye bas."}
-              </p>
-              {notice && <p className="text-sm text-accent">{notice}</p>}
-            </div>
-            {job?.status === "error" && job.error?.retryable && (
-              <button type="button" onClick={() => void retryJob()} className="text-sm underline">
-                Tekrar dene
+        <form
+          className="shrink-0 border-t border-line pt-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void sendMessage();
+          }}
+        >
+          <div className="py-3">
+            <p className="mb-2 text-sm text-muted">
+              {sending
+                ? "Gönderiliyor…"
+                : jobBusy && job
+                  ? jobLabel[job.status]
+                  : job?.status === "error"
+                    ? job.error?.message
+                    : shouldEnd
+                      ? "Müşteri konuşmayı kapattı. İstersen bitir."
+                      : atLimit
+                        ? "Tur doldu. Değerlendirme için bitir."
+                        : "Yaz, Enter ile gönder."}
+              {notice ? <span className="text-accent"> {notice}</span> : null}
+              {job?.status === "error" && job.error?.retryable && (
+                <button type="button" onClick={() => void retryJob()} className="ml-2 underline">
+                  Tekrar dene
+                </button>
+              )}
+            </p>
+            <div className="flex items-end gap-2">
+              <textarea
+                value={draft}
+                rows={2}
+                maxLength={1000}
+                disabled={!canSend}
+                placeholder="Cevabını yaz"
+                className="min-h-12 flex-1 resize-none rounded-2xl border border-line bg-card px-4 py-3 outline-none focus:border-ink disabled:opacity-50"
+                onChange={(event) => setDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    void sendMessage();
+                  }
+                }}
+              />
+              <button
+                type="submit"
+                disabled={!canSend || draft.trim().length === 0}
+                className="rounded-full bg-ink px-4 py-2.5 text-paper disabled:opacity-40"
+              >
+                Gönder
               </button>
-            )}
+            </div>
           </div>
-        </div>
+        </form>
       )}
     </div>
   );

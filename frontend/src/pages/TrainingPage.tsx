@@ -81,7 +81,7 @@ export function TrainingPage() {
       >
         {start.isPending ? "Hazırlanıyor…" : "Provayı başlat"}
       </button>
-      <p className="mt-3 text-sm text-muted">Mikrofon istenecek. Her cevabın en fazla 30 saniye.</p>
+      <p className="mt-3 text-sm text-muted">Müşteri yazarak başlar. Sen de yazarak cevap verirsin.</p>
     </div>
   );
 }

@@ -22,7 +22,7 @@ export function HomePage() {
       <header>
         <h1 className="font-serif text-4xl tracking-tight">Merhaba{first ? `, ${first}` : ""}</h1>
         <p className="mt-2 max-w-xl text-muted">
-          Atanan provayı bitir ya da listeden bir senaryo seç. Müşteri önce konuşur, sen sesle cevap verirsin.
+          Atanan provayı bitir ya da listeden bir senaryo seç. Müşteri önce yazar, sen yazarak cevap verirsin.
         </p>
       </header>
 

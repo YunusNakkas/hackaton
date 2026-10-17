@@ -18,8 +18,8 @@ export const assignmentLabel: Record<AssignmentStatus, string> = {
 export const jobLabel: Record<JobStatus, string> = {
   queued: "Sırada",
   transcribing: "Konuşman yazıya dökülüyor",
-  generating: "Müşteri cevap yazıyor",
-  synthesizing: "Ses hazırlanıyor",
+  generating: "Müşteri yazıyor",
+  synthesizing: "Cevap hazırlanıyor",
   evaluating: "Değerlendiriliyor",
   ready: "Hazır",
   error: "Hata",
