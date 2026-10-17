@@ -19,6 +19,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+  "sounddevice>=0.5",  # eval/mic_session.py
   "pytest>=8",
   "ruff>=0.6",
   "pyyaml>=6",

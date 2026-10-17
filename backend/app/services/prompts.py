@@ -6,6 +6,10 @@ CUSTOMER_VERSION = "customer@1"
 EVALUATOR_VERSION = "evaluator@1"
 ASR_VERSION = "asr@1"
 END_MARKER = "[GÖRÜŞME_BİTTİ]"
+ROLE_REMINDER = (
+    "Hatırlatma: Sen anlatıcı veya koç değilsin, MÜŞTERİSİN. Çalışanın son cümlesi anlamsız, kaba veya "
+    "eksik olsa bile müşteri olarak, birinci tekil şahısla, en fazla 2 cümleyle doğrudan çalışana cevap ver."
+)
 
 
 def asr_prompt(hint_terms: list[str]) -> str:

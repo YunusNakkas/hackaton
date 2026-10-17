@@ -5,6 +5,11 @@ Kendi Terminal pencerende çalıştır (macOS mikrofon izni ister):
   backend/.venv/bin/python eval/mic_session.py              # Fişsiz iade senaryosu
   backend/.venv/bin/python eval/mic_session.py --list       # senaryoları listele
   backend/.venv/bin/python eval/mic_session.py --training "klima"
+  backend/.venv/bin/python eval/mic_session.py --mic "MacBook"   # mikrofon seç (adından bir parça)
+
+Bağımlılık: backend/.venv/bin/pip install sounddevice
+Bluetooth kulaklık mikrofonu (AirPods vb.) dar bantlıdır ve ASR'yi belirgin biçimde kötüleştirir;
+ölçüm için dahili mikrofon önerilir.
 
 Model servisi çalışmıyorsa otomatik başlatılır (MLX, ~10 sn) ve sonunda kapatılır.
 Kayıtlar ve transkriptler: var/mic-tests/<zaman>/  (session.json + kayıt WAV'ları)
@@ -14,6 +19,8 @@ import argparse
 import io
 import json
 import os
+import queue
+import signal
 import subprocess
 import sys
 import tempfile
@@ -31,9 +38,13 @@ os.environ.update(PM_ENV="test", PM_DATABASE_URL=f"sqlite:///{TMP / 'mic.sqlite3
 sys.path.insert(0, str(ROOT / "backend"))
 
 import app.models  # noqa: E402,F401
-import av  # noqa: E402
 import httpx  # noqa: E402
 import numpy as np  # noqa: E402
+
+try:
+    import sounddevice as sd
+except ImportError:
+    sys.exit("sounddevice gerekli: backend/.venv/bin/pip install sounddevice")
 from app.db import Base, get_engine, get_sessionmaker  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app.seed import seed  # noqa: E402
@@ -71,46 +82,55 @@ def start_model_service() -> subprocess.Popen | None:
     sys.exit("Model servisi 5 dakikada hazır olmadı.")
 
 
-def record_until_enter() -> tuple[bytes, float]:
-    """Varsayılan mikrofondan Enter'a basılana (veya 30 sn dolana) kadar kaydeder; 16 kHz mono WAV döner."""
+BLUETOOTH_HINTS = ("airpods", "bluetooth", "buds", "headset", "kulaklık")
+
+
+def pick_mic(name_part: str | None) -> tuple[int, str]:
+    mics = [(i, d["name"]) for i, d in enumerate(sd.query_devices()) if d["max_input_channels"] > 0]
+    if name_part:
+        found = [m for m in mics if name_part.lower() in m[1].lower()]
+        if not found:
+            sys.exit(f"'{name_part}' adlı mikrofon yok. Mevcut: {', '.join(n for _, n in mics)}")
+        return found[0]
+    default = sd.query_devices(kind="input")
+    return next(m for m in mics if m[1] == default["name"])
+
+
+def record_until_enter(device: int) -> tuple[bytes, float]:
+    """Seçili mikrofondan Enter'a basılana (veya 30 sn dolana) kadar kaydeder; 16 kHz mono WAV döner.
+
+    PortAudio callback'i ile sürekli okunur; cihazın kendi örnekleme hızında alınıp 16 kHz'e çevrilir.
+    """
+    rate = int(sd.query_devices(device)["default_samplerate"])
+    q: queue.Queue[np.ndarray] = queue.Queue()
+    overflow = threading.Event()
     stop = threading.Event()
-    chunks: list[np.ndarray] = []
-    error: list[Exception] = []
 
-    def worker():
-        try:
-            with av.open(":default", format="avfoundation") as mic:
-                stream = mic.streams.audio[0]
-                resampler = av.AudioResampler(format="s16", layout="mono", rate=16_000)
-                t0 = time.monotonic()
-                while not stop.is_set() and time.monotonic() - t0 <= MAX_S:
-                    try:
-                        packet = next(mic.demux(stream))
-                    except BlockingIOError:  # avfoundation veri hazır değilse EAGAIN döner
-                        time.sleep(0.005)
-                        continue
-                    for frame in packet.decode():
-                        for out in resampler.resample(frame):
-                            chunks.append(out.to_ndarray().reshape(-1))
-        except Exception as exc:  # izin yoksa veya cihaz açılamazsa
-            error.append(exc)
-        stop.set()
+    def callback(indata, frames, t, status):
+        if status.input_overflow:
+            overflow.set()
+        q.put(indata[:, 0].copy())
 
-    th = threading.Thread(target=worker, daemon=True)
-    th.start()
     print(f"  🎙  Kayıtta... bitirmek için Enter (en fazla {MAX_S} sn)", flush=True)
-    t0 = time.monotonic()
     waiter = threading.Thread(target=lambda: (input(), stop.set()), daemon=True)
-    waiter.start()
-    stop.wait()
-    th.join(timeout=3)
-    if error:
-        sys.exit(f"Mikrofon açılamadı: {error[0]}\nSistem Ayarları > Gizlilik ve Güvenlik > Mikrofon'dan "
+    try:
+        with sd.InputStream(device=device, samplerate=rate, channels=1, dtype="float32", callback=callback):
+            waiter.start()
+            stop.wait(timeout=MAX_S)
+    except sd.PortAudioError as exc:
+        sys.exit(f"Mikrofon açılamadı: {exc}\nSistem Ayarları > Gizlilik ve Güvenlik > Mikrofon'dan "
                  "Terminal'e izin ver ve tekrar dene.")
-    if time.monotonic() - t0 > MAX_S:
-        print("  (30 sn doldu, kayıt otomatik durdu — Enter'a bas)")
+    if not stop.is_set():
+        print("  (30 sn doldu, kayıt durdu — devam etmek için Enter)")
         waiter.join()
-    pcm = np.concatenate(chunks).astype(np.int16) if chunks else np.zeros(0, dtype=np.int16)
+    if overflow.is_set():
+        print("  uyarı: kayıt sırasında ses tamponu taştı, bir kısım kaybolmuş olabilir")
+    chunks = list(q.queue)
+    audio = np.concatenate(chunks) if chunks else np.zeros(0, dtype=np.float32)
+    if rate != 16_000 and len(audio):  # doğrusal ara değerleme; konuşma için yeterli
+        n = int(len(audio) * 16_000 / rate)
+        audio = np.interp(np.linspace(0, len(audio) - 1, n), np.arange(len(audio)), audio)
+    pcm = (np.clip(audio, -1, 1) * 32767).astype(np.int16)
     buf = io.BytesIO()
     with wave.open(buf, "wb") as w:
         w.setnchannels(1)
@@ -139,7 +159,11 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--training", default="Fişsiz iade", help="senaryo başlığından bir parça")
     ap.add_argument("--list", action="store_true")
+    ap.add_argument("--mic", help="mikrofon adından bir parça (varsayılan: sistemin varsayılanı)")
     args = ap.parse_args()
+    # Pencere kapanınca da finally çalışsın; yoksa model servisi arkada açık kalıyordu.
+    for sig in (signal.SIGHUP, signal.SIGTERM):
+        signal.signal(sig, lambda *_: sys.exit(1))
 
     Base.metadata.create_all(get_engine())
     with get_sessionmaker()() as db:
@@ -157,10 +181,18 @@ def main() -> None:
     training = matches[0]
     detail = c.get(f"/api/v1/trainings/{training['id']}").json()
 
+    mic_id, mic_name = pick_mic(args.mic)
+    print(f"Mikrofon: {mic_name}")
+    if any(h in mic_name.lower() for h in BLUETOOTH_HINTS):
+        print("  uyarı: Bluetooth mikrofon dar bantlıdır, ASR kötüleşir. Dahili mikrofon için: --mic MacBook")
     proc = start_model_service()
     out_dir = ROOT / "var/mic-tests" / datetime.now().strftime("%Y%m%d-%H%M%S")
     out_dir.mkdir(parents=True, exist_ok=True)
-    log: dict = {"training": training["title"], "turns": []}
+    log: dict = {"training": training["title"], "mic": mic_name, "turns": []}
+
+    def save_log() -> None:
+        (out_dir / "session.json").write_text(json.dumps(log, ensure_ascii=False, indent=2), encoding="utf-8")
+
     try:
         print(f"SENARYO: {training['title']}\n{training['summary']}")
         print(f"Müşteri: {detail['customer']['name']} — {detail['customer']['context']}")
@@ -180,7 +212,7 @@ def main() -> None:
             cmd = input("\n[Enter] konuş  |  [b + Enter] bitir: ").strip().lower()
             if cmd == "b":
                 break
-            wav, secs = record_until_enter()
+            wav, secs = record_until_enter(mic_id)
             n += 1
             (out_dir / f"tur{n}.wav").write_bytes(wav)
             if secs < 0.5:
@@ -202,6 +234,7 @@ def main() -> None:
             log["turns"].append({"file": f"tur{n}.wav", "seconds": round(secs, 1), "asr": res["employee_turn"]["text"],
                                  "reply": res["customer_turn"]["text"], "latency_s": round(took, 2),
                                  "said": None})  # gerçekte ne söylendiği sonradan elle doldurulabilir
+            save_log()
             play(c, sid, res["customer_turn"]["id"])
             if res["session_should_end"]:
                 print("\n(Müşteri görüşmeyi bitirdi.)")
@@ -229,10 +262,14 @@ def main() -> None:
             if rep["flags"]:
                 print(f"  bayraklar: {rep['flags']}")
     finally:
-        (out_dir / "session.json").write_text(json.dumps(log, ensure_ascii=False, indent=2), encoding="utf-8")
+        save_log()
         print(f"\nKayıtlar: {out_dir}")
         if proc:
             proc.terminate()
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                proc.kill()
 
 
 if __name__ == "__main__":

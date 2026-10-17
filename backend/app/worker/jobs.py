@@ -56,6 +56,20 @@ def clean_reply(text: str) -> tuple[str, bool]:
     return text, ended
 
 
+# Anlatıcı/koç gibi konuşan cevaplar (gerçek mikrofon denemesinde görüldü:
+# "Ayşe Hanım'ın bu yanıtı ile karşılaştığı durumu... Yeni bir diyalog başlatabilirsin.")
+_META = re.compile(r"diyalog|senaryo|\brol(ü|ün|de|den|e)?\b|yapay zek|asistan|müşteri olarak|çalışanın", re.I)
+MAX_REPLY_CHARS = 350
+MIN_TURNS_BEFORE_END = 2  # model ilk cevaptan sonra görüşmeyi bitirebiliyordu
+FALLBACK_REPLY = "Pardon, tam anlayamadım. Bu durumda ne yapabiliriz?"
+
+
+def looks_out_of_role(text: str, customer_name: str) -> bool:
+    first = customer_name.split()[0]
+    third_person = re.search(rf"{re.escape(first)}[^\s]*\s*(hanım|bey)?['’](ın|in|un|ün|nın|nin)\b", text, re.I)
+    return bool(_META.search(text) or third_person or "\n\n" in text.strip() or len(text) > MAX_REPLY_CHARS)
+
+
 def _synthesize_turn(settings: Settings, turn: Turn) -> None:
     rel = Path("sessions") / turn.session_id / turn.id
     res = tts.synthesize(settings, turn.text or "", _media(settings, rel))
@@ -93,10 +107,15 @@ def process_turn(db: Session, job: Job, settings: Settings, model: ModelClient) 
         _stage(db, job, "generating")
         history = [(x.speaker, x.text) for x in _ready_history(db, s.id, turn.index)]
         messages = prompts.customer_messages(t.scenario, t.policies, [*history, ("employee", turn.text)])
-        raw = model.chat(messages, max_new_tokens=120, temperature=1.0, purpose="customer_reply")
-        reply, ended = clean_reply(raw)
-        if not reply:
-            raise JobFailed("model_unavailable", "Müşteri cevabı üretilemedi. Tekrar deneyin.", True)
+        reply, ended = clean_reply(model.chat(messages, max_new_tokens=120, temperature=1.0, purpose="customer_reply"))
+        if not reply or looks_out_of_role(reply, t.scenario["customer"]["name"]):
+            log.warning("müşteri cevabı rol dışı, tekrar üretiliyor: %r", reply[:120])
+            state["out_of_role"] = [reply]
+            retry = [{**messages[0], "content": messages[0]["content"] + "\n\n" + prompts.ROLE_REMINDER}, *messages[1:]]
+            reply, ended = clean_reply(model.chat(retry, max_new_tokens=120, temperature=1.0, purpose="customer_reply"))
+            if not reply or looks_out_of_role(reply, t.scenario["customer"]["name"]):
+                state["out_of_role"].append(reply)
+                reply, ended = FALLBACK_REPLY, False  # sabit, rolde kalan cümle; job.state'te iz bırakır
         state.update(reply_text=reply, customer_ended=ended)
         job.state = state
         db.commit()
@@ -120,7 +139,8 @@ def process_turn(db: Session, job: Job, settings: Settings, model: ModelClient) 
         "kind": "turn",
         "employee_turn": schemas.turn_json(turn),
         "customer_turn": schemas.turn_json(customer),
-        "session_should_end": bool(state.get("customer_ended")) or done >= t.max_turns,
+        "session_should_end": (bool(state.get("customer_ended")) and done >= MIN_TURNS_BEFORE_END)
+        or done >= t.max_turns,
     }
 
 

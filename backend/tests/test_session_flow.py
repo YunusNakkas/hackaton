@@ -228,3 +228,57 @@ def test_other_users_job_is_hidden(elif_client, can_client):
     session = _start(elif_client)["session"]
     job_id = _upload(elif_client, session["id"]).json()["job_id"]
     assert can_client.get(f"/api/v1/jobs/{job_id}").status_code == 404
+
+
+class ScriptedCustomer(StubModelClient):
+    """Müşteri cevaplarını sırayla verir."""
+
+    def __init__(self, replies):
+        super().__init__()
+        self.replies, self.calls = list(replies), 0
+
+    def chat(self, messages, **kw):
+        if kw["purpose"] == "customer_reply":
+            self.calls += 1
+            return self.replies.pop(0)
+        return super().chat(messages, **kw)
+
+
+NARRATOR = "Ayşe Hanım'ın bu yanıtı ile karşılaştığı durumu yaşamak zorunda değil.\n\nYeni bir diyalog başlatabilirsin."
+
+
+def _one_turn(client, model) -> dict:
+    sid = _start(client)["session"]["id"]
+    job_id = _upload(client, sid).json()["job_id"]
+    run_once(model=model)
+    return client.get(f"/api/v1/jobs/{job_id}").json()
+
+
+def test_out_of_role_reply_is_regenerated(elif_client):
+    model = ScriptedCustomer([NARRATOR, "Ne demek istiyorsunuz? Paramı geri istiyorum."])
+    job = _one_turn(elif_client, model)
+    assert job["result"]["customer_turn"]["text"] == "Ne demek istiyorsunuz? Paramı geri istiyorum."
+    assert model.calls == 2
+
+
+def test_persistent_out_of_role_falls_back_to_in_role_line(elif_client):
+    from app.worker.jobs import FALLBACK_REPLY
+
+    job = _one_turn(elif_client, ScriptedCustomer([NARRATOR, "Senaryo gereği müşteri olarak tepki veririm."]))
+    assert job["status"] == "ready" and job["result"]["customer_turn"]["text"] == FALLBACK_REPLY
+
+
+def test_end_marker_ignored_on_first_turn(elif_client):
+    job = _one_turn(elif_client, ScriptedCustomer(["Tamam, anladım. [GÖRÜŞME_BİTTİ]"]))
+    assert job["result"]["customer_turn"]["text"] == "Tamam, anladım."
+    assert job["result"]["session_should_end"] is False
+
+
+def test_end_marker_honored_after_two_turns(elif_client):
+    model = ScriptedCustomer(["Peki, sonra?", "Tamam, teşekkürler. [GÖRÜŞME_BİTTİ]"])
+    sid = _start(elif_client)["session"]["id"]
+    _upload(elif_client, sid)
+    run_once(model=model)
+    job_id = _upload(elif_client, sid).json()["job_id"]
+    run_once(model=model)
+    assert elif_client.get(f"/api/v1/jobs/{job_id}").json()["result"]["session_should_end"] is True
