@@ -340,3 +340,38 @@ def test_asr_echoing_hint_list_is_no_speech(elif_client):
     assert_contract("Job", job)
     assert job["status"] == "error" and job["error"]["code"] == "no_speech" and not job["error"]["retryable"]
     assert _upload(elif_client, session["id"]).status_code == 202  # kullanıcı yeniden kaydedebilir
+
+
+@pytest.mark.parametrize("raw,clean", [
+    ('Hemen" sizin için ne demek, açıklar mısınız?', "Hemen sizin için ne demek, açıklar mısınız?"),  # gerçek çıktı
+    ('"Hemen" ne demek?', '"Hemen" ne demek?'),
+    ('"Tamam, anladım."', "Tamam, anladım."),
+    ("“Hemen” dediniz ama.", "“Hemen” dediniz ama."),
+    ("Yani “hemen mi?", "Yani hemen mi?"),
+    ("Müşteri: Çok  uzun   sürdü.", "Çok uzun sürdü."),
+])
+def test_clean_reply_quotes_and_spaces(raw, clean):
+    from app.worker.jobs import clean_reply
+
+    assert clean_reply(raw)[0] == clean
+
+
+def test_text_turn_never_shows_transcribing(elif_client):
+    from app.db import get_sessionmaker
+    from app.worker.jobs import claim_next
+
+    sid = _start(elif_client)["session"]["id"]
+    res = elif_client.post(f"/api/v1/sessions/{sid}/messages", headers=CSRF,
+                           json={"text": "Merhaba, yardımcı olayım.", "client_request_id": str(uuid.uuid4())})
+    with get_sessionmaker()() as db:
+        assert claim_next(db).status == "generating"
+    assert elif_client.get(f"/api/v1/jobs/{res.json()['job_id']}").json()["status"] == "generating"
+
+
+def test_voice_turn_starts_with_transcribing(elif_client):
+    from app.db import get_sessionmaker
+    from app.worker.jobs import claim_next
+
+    _upload(elif_client, _start(elif_client)["session"]["id"])
+    with get_sessionmaker()() as db:
+        assert claim_next(db).status == "transcribing"

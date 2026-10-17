@@ -49,11 +49,22 @@ def _ready_history(db: Session, session_id: str, before_index: int) -> list[Turn
 _ROLE_PREFIX = re.compile(r"^\s*(müşteri|musteri|customer|ayşe hanım|assistant)\s*:\s*", re.I)
 
 
+def _drop_unbalanced(text: str, *pair: str) -> str:
+    # Model bazen tırnağın yalnız birini yazıyor ('Hemen" sizin için...'); eşleşmeyen tırnak ekranda ve
+    # seslendirmede anlamsız. Dengeli tırnaklar (gerçek alıntı) korunur.
+    count = sum(text.count(ch) for ch in pair)
+    balanced = count % 2 == 0 if len(pair) == 1 else text.count(pair[0]) == text.count(pair[1])
+    return text if balanced else "".join(ch for ch in text if ch not in pair)
+
+
 def clean_reply(text: str) -> tuple[str, bool]:
     ended = prompts.END_MARKER in text
     text = text.replace(prompts.END_MARKER, "")
-    text = _ROLE_PREFIX.sub("", text.strip()).strip().strip('"').strip()
-    return text, ended
+    text = _ROLE_PREFIX.sub("", text.strip()).strip()
+    if len(text) > 1 and text[0] == text[-1] == '"':  # yalnız cümleyi saran tırnak çifti
+        text = text[1:-1].strip()
+    text = _drop_unbalanced(_drop_unbalanced(text, '"'), "“", "”")
+    return " ".join(text.split()), ended
 
 
 # Anlatıcı/koç gibi konuşan cevaplar (gerçek mikrofon denemesinde görüldü:
@@ -270,6 +281,15 @@ def run_job(db: Session, job: Job, settings: Settings, model: ModelClient) -> No
         _fail(db, db.get(Job, job.id), JobFailed("internal_error", "Beklenmeyen bir hata oluştu.", True))
 
 
+def first_stage(db: Session, job: Job) -> str:
+    """Yazılı turda (ses yok) veya ASR'si önceden bitmiş tekrar denemede `transcribing` gösterilmez."""
+    if job.kind == "turn":
+        turn = db.get(Turn, job.turn_id)
+        if "asr_text" in (job.state or {}) or (turn is not None and turn.audio_path is None):
+            return "generating"
+    return FIRST_STAGE[job.kind]
+
+
 def claim_next(db: Session) -> Job | None:
     job = (db.query(Job).filter(Job.status == "queued", Job.kind.in_(HANDLERS))
            .order_by(Job.priority, Job.id).first())
@@ -277,7 +297,7 @@ def claim_next(db: Session) -> Job | None:
         return None
     # Koşullu güncelleme: başka bir süreç aynı işi aldıysa satır sayısı 0 olur.
     claimed = db.execute(update(Job).where(Job.id == job.id, Job.status == "queued")
-                         .values(status=FIRST_STAGE[job.kind], updated_at=utcnow())).rowcount
+                         .values(status=first_stage(db, job), updated_at=utcnow())).rowcount
     db.commit()
     if not claimed:
         return None
