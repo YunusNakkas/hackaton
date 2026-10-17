@@ -58,6 +58,9 @@ def env(tmp_path, monkeypatch):
         fn.cache_clear()
     model_client._stub_singleton = None
     login_limiter._fails.clear()
+    from app.services import capabilities
+
+    capabilities.clear_cache()
 
     import app.models  # noqa: F401
     dbmod.Base.metadata.create_all(dbmod.get_engine())

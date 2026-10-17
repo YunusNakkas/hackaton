@@ -30,6 +30,7 @@ def pick_device() -> str:
 
 class TransformersAdapter:
     runtime = "transformers"
+    supports_audio = True
 
     def __init__(self, model_id: str):
         self.model_id = model_id

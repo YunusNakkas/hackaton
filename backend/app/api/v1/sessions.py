@@ -18,6 +18,7 @@ from app.db import get_db
 from app.models import Assignment, Evaluation, Job, PracticeSession, Training, Turn, User
 from app.services import evaluation as evalsvc
 from app.services.audio import ALLOWED_MIME, base_mime, decode_to_wav, extension_for
+from app.services.capabilities import AUDIO_UNSUPPORTED_MSG, model_status
 from app.services.prompts import CUSTOMER_VERSION
 
 router = APIRouter(tags=["sessions"])
@@ -180,6 +181,9 @@ async def submit_turn(session_id: str, audio: UploadFile = File(...), client_req
     if done >= t.max_turns:
         raise conflict("session_not_active", "Tur sınırına ulaşıldı. Lütfen görüşmeyi bitirin.")
 
+    status = model_status(settings)
+    if status.service == "up" and not status.audio_input:  # servis kapalıysa yükleme kabul edilir, iş tekrar denenir
+        raise ApiError(422, "audio_unsupported", AUDIO_UNSUPPORTED_MSG)
     mime = base_mime(audio.content_type)
     if mime not in ALLOWED_MIME:
         raise ApiError(415, "unsupported_media_type", "Bu ses biçimi desteklenmiyor.")

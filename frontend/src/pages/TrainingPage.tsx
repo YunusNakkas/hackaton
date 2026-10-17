@@ -2,7 +2,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { allPages, api, isApiError } from "../api/client";
-import type { Assignment, CreateSessionResponse, Me, PracticeChannel, TrainingDetail } from "../api/types";
+import type { Assignment, CreateSessionResponse, Health, Me, PracticeChannel, TrainingDetail } from "../api/types";
 import { AssignModal } from "../components/AssignModal";
 import { primeCallAudio } from "../lib/callAudio";
 import { difficultyLabel, sectorLabel } from "../lib/labels";
@@ -15,6 +15,9 @@ export function TrainingPage() {
   const [assignOpen, setAssignOpen] = useState(false);
 
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<Me>("/me") });
+  const health = useQuery({ queryKey: ["health"], queryFn: () => api<Health>("/health") });
+  // Ses desteklemeyen kurulumda (ör. Windows/Ollama) telefon provası açılmaz.
+  const audioOk = health.data?.audio_input === true;
   const isManager = me.data?.user.role === "manager";
 
   const training = useQuery({
@@ -141,7 +144,8 @@ export function TrainingPage() {
           {assignedChannel !== "message" && (
             <button
               type="button"
-              disabled={start.isPending}
+              disabled={start.isPending || !audioOk}
+              title={audioOk ? undefined : "Bu kurulumda sesli cevap desteklenmiyor"}
               onClick={() => {
                 primeCallAudio();
                 start.mutate("phone");
@@ -154,6 +158,7 @@ export function TrainingPage() {
         </div>
         <p className="mt-2.5 text-xs text-muted">
           Mesaj provası yazılıdır. Telefon provası karşılıklı aramadır; sustuğunda söz müşteriye geçer.
+          {!audioOk && " Bu kurulum sesli cevabı desteklemediği için telefon provası kapalı."}
         </p>
       </div>
 

@@ -61,5 +61,6 @@
   "pending_job_id": null,
   "started_at": "2026-10-17T10:00:00Z",
   "finished_at": null,
-  "practice": null
+  "practice": null,
+  "channel": "message"
 }

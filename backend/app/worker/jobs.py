@@ -20,7 +20,8 @@ from app.models import Evaluation, Job, PracticeSession, Training, TrainingDraft
 from app.services import drafts as draftsvc
 from app.services import evaluation as evalsvc
 from app.services import prompts, tts
-from app.services.model_client import ModelClient, ModelUnavailable, get_model_client
+from app.services.capabilities import AUDIO_UNSUPPORTED_MSG
+from app.services.model_client import ModelClient, ModelRejected, ModelUnavailable, get_model_client
 
 log = logging.getLogger("provamusteri.worker")
 
@@ -119,7 +120,10 @@ def process_turn(db: Session, job: Job, settings: Settings, model: ModelClient) 
         _stage(db, job, "transcribing")
         wav = _media(settings, Path(turn.audio_path).parent / f"{turn.id}.16k.wav").read_bytes()
         hints = t.scenario.get("asr_hints", [])
-        text = model.transcribe(wav, prompts.asr_prompt(hints)).strip()
+        try:
+            text = model.transcribe(wav, prompts.asr_prompt(hints)).strip()
+        except ModelRejected as exc:
+            raise JobFailed("audio_unsupported", AUDIO_UNSUPPORTED_MSG, False) from exc
         if not text or is_hint_echo(text, hints):
             raise JobFailed("no_speech", "Konuşmanız anlaşılamadı. Lütfen tekrar kaydedin.", False)
         state["asr_text"] = text
@@ -288,6 +292,10 @@ def run_job(db: Session, job: Job, settings: Settings, model: ModelClient) -> No
     except JobFailed as exc:
         db.rollback()
         _fail(db, db.get(Job, job.id), exc)
+    except ModelRejected as exc:
+        db.rollback()
+        log.warning("model servisi isteği reddetti: %s", exc)
+        _fail(db, db.get(Job, job.id), JobFailed("internal_error", "Model bu isteği işleyemedi.", False))
     except ModelUnavailable as exc:
         db.rollback()
         log.warning("model servisine ulaşılamadı: %s", exc)

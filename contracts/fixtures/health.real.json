@@ -1,0 +1,7 @@
+{
+  "status": "ok",
+  "version": "0.1.0",
+  "model_service": "up",
+  "tts_provider": "local",
+  "audio_input": true
+}

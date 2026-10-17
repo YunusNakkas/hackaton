@@ -8,6 +8,7 @@ import httpx
 
 class OllamaAdapter:
     runtime = "ollama"
+    supports_audio = False  # yerel metin modeli; ses girişi 422 ile reddedilir
 
     def __init__(self, model_id: str):
         self.model_id = model_id

@@ -27,5 +27,7 @@
   "sessions.practice_adaptive.json": "Session",
   "admin.policy_extraction.processing.json": "PolicyExtraction",
   "admin.policy_extraction.ready.json": "PolicyExtraction",
-  "jobs.policy_extraction.ready.json": "Job"
+  "jobs.policy_extraction.ready.json": "Job",
+  "health.real.json": "Health",
+  "health.text_only.json": "Health"
 }

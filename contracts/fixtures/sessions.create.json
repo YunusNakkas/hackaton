@@ -42,7 +42,8 @@
     "pending_job_id": "01JA000000000000000000JB00",
     "started_at": "2026-10-17T10:00:00Z",
     "finished_at": null,
-    "practice": null
+    "practice": null,
+    "channel": "message"
   },
   "opening_job_id": "01JA000000000000000000JB00"
 }
