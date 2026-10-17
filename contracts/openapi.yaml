@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: ProvaMüşteri API
-  version: 0.1.1
+  version: 0.1.2
   description: |
     Sesli müşteri provası ve yönetici inceleme platformu. Bu dosya frontend ile backend
     arasındaki tek otoritedir; değişiklikler `contracts/README.md` kurallarına göre yapılır.
@@ -212,6 +212,8 @@ paths:
         - Aynı anda oturum başına yalnızca bir işlenen tur olabilir (aksi 409 `turn_in_progress`).
         - Aynı `client_request_id` tekrar gönderilirse aynı `job_id` döner (ses tekrar işlenmez).
         - Limitler: en fazla 10 MB ve 30 sn (Gemma 4 ses girişi sınırı); en az 0,5 sn. İstemci 30 sn'de kaydı otomatik durdurmalı.
+        - Kayıtta en az 0,3 sn konuşma algılanmazsa 422 `no_speech` döner (sessiz kayıtta ASR metin uyduruyor).
+          ASR sonucu anlaşılamazsa iş `error.code = no_speech`, `retryable = false` ile biter; kullanıcı yeniden kaydeder.
       parameters:
         - $ref: "#/components/parameters/SessionId"
         - $ref: "#/components/parameters/CsrfHeader"
@@ -783,6 +785,7 @@ components:
         - audio_too_short
         - audio_too_long
         - audio_undecodable
+        - no_speech
         - validation_error
         - rate_limited
         - model_unavailable

@@ -282,3 +282,26 @@ def test_end_marker_honored_after_two_turns(elif_client):
     job_id = _upload(elif_client, sid).json()["job_id"]
     run_once(model=model)
     assert elif_client.get(f"/api/v1/jobs/{job_id}").json()["result"]["session_should_end"] is True
+
+
+def test_silent_recording_rejected_before_asr(elif_client):
+    session = _start(elif_client)["session"]
+    res = _upload(elif_client, session["id"], audio=make_audio(3, fmt="wav", amplitude=0.002), mime="audio/wav")
+    assert res.status_code == 422
+    assert_contract("Error", res.json())
+    assert res.json()["error"]["code"] == "no_speech"
+
+
+class HintEchoASR(StubModelClient):
+    def transcribe(self, wav, prompt):
+        return "iade fiş ekstre kart kayıt hediye çeki POS"  # gerçek mikrofon denemesinde görülen çıktı
+
+
+def test_asr_echoing_hint_list_is_no_speech(elif_client):
+    session = _start(elif_client)["session"]
+    job_id = _upload(elif_client, session["id"]).json()["job_id"]
+    run_once(model=HintEchoASR())
+    job = elif_client.get(f"/api/v1/jobs/{job_id}").json()
+    assert_contract("Job", job)
+    assert job["status"] == "error" and job["error"]["code"] == "no_speech" and not job["error"]["retryable"]
+    assert _upload(elif_client, session["id"]).status_code == 202  # kullanıcı yeniden kaydedebilir

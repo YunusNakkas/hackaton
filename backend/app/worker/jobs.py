@@ -64,6 +64,13 @@ MIN_TURNS_BEFORE_END = 2  # model ilk cevaptan sonra görüşmeyi bitirebiliyord
 FALLBACK_REPLY = "Pardon, tam anlayamadım. Bu durumda ne yapabiliriz?"
 
 
+def is_hint_echo(text: str, hints: list[str]) -> bool:
+    """Model sesi anlayamayınca ASR prompt'undaki ipucu listesini aynen geri okuyabiliyor."""
+    words = re.findall(r"\w+", text.lower())
+    hint_words = {w for h in hints for w in re.findall(r"\w+", h.lower())}
+    return bool(words) and len(words) >= 3 and sum(w in hint_words for w in words) / len(words) >= 0.8
+
+
 def looks_out_of_role(text: str, customer_name: str) -> bool:
     first = customer_name.split()[0]
     third_person = re.search(rf"{re.escape(first)}[^\s]*\s*(hanım|bey)?['’](ın|in|un|ün|nın|nin)\b", text, re.I)
@@ -95,9 +102,10 @@ def process_turn(db: Session, job: Job, settings: Settings, model: ModelClient) 
     if "asr_text" not in state:
         _stage(db, job, "transcribing")
         wav = _media(settings, Path(turn.audio_path).parent / f"{turn.id}.16k.wav").read_bytes()
-        text = model.transcribe(wav, prompts.asr_prompt(t.scenario.get("asr_hints", []))).strip()
-        if not text:
-            raise JobFailed("audio_undecodable", "Konuşmanız anlaşılamadı. Lütfen tekrar kaydedin.", False)
+        hints = t.scenario.get("asr_hints", [])
+        text = model.transcribe(wav, prompts.asr_prompt(hints)).strip()
+        if not text or is_hint_echo(text, hints):
+            raise JobFailed("no_speech", "Konuşmanız anlaşılamadı. Lütfen tekrar kaydedin.", False)
         state["asr_text"] = text
         turn.text = text
         job.state = state

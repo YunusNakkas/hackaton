@@ -21,11 +21,11 @@ def assert_contract(schema_name: str, body) -> None:
     assert not errors, "\n".join(f"{'/'.join(map(str, e.absolute_path))}: {e.message}" for e in errors)
 
 
-def make_audio(seconds: float = 2.0, fmt: str = "webm") -> bytes:
+def make_audio(seconds: float = 2.0, fmt: str = "webm", amplitude: float = 0.3) -> bytes:
     """Gerçek tarayıcı kaydı gibi opus/webm (veya wav) üretir; çözme yolu gerçekten test edilir."""
     rate = 48_000
     t = np.arange(int(rate * seconds)) / rate
-    pcm = (0.3 * np.sin(2 * math.pi * 220 * t) * 32767).astype(np.int16)
+    pcm = (amplitude * np.sin(2 * math.pi * 220 * t) * 32767).astype(np.int16)
     buf = io.BytesIO()
     codec = "libopus" if fmt == "webm" else "pcm_s16le"
     with av.open(buf, "w", format=fmt) as out:

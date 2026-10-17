@@ -20,6 +20,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from app.priority_lock import PriorityLock
+from app.text_cleanup import strip_thinking
 
 log = logging.getLogger("model-service")
 RUNTIME = os.environ.get("PM_RUNTIME", "transformers")  # transformers | mlx
@@ -111,5 +112,6 @@ def generate(req: GenerateRequest):
         with slot.acquire(req.priority):
             queue_s = time.perf_counter() - waited
             out = adapter.generate(messages, req.max_new_tokens, req.sampling.model_dump() if req.sampling else None)
+    out["text"] = strip_thinking(out["text"])
     log.info("üretim p=%d kuyruk=%.2fs süre=%.2fs token=%d", req.priority, queue_s, out["seconds"], out["new_tokens"])
     return {**out, "queue_seconds": round(queue_s, 3), "model": adapter.model_id, "runtime": adapter.runtime}
