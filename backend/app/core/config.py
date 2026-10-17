@@ -24,9 +24,10 @@ class Settings(BaseSettings):
     model_timeout_s: float = 180.0
     eval_temperature: float = 1.0  # resmî öneri; S0'da ±1 sapma görüldü, ayarlanacak
 
-    # local: macOS `say` (yalnız macOS host). none: müşteri sesi üretilmez.
-    tts_provider: Literal["local", "none"] = "none"
+    # piper: yerel ONNX ses modeli. local: macOS `say`. none: ses üretilmez.
+    tts_provider: Literal["local", "piper", "none"] = "none"
     tts_voice: str = "Yelda"
+    tts_model_path: Path | None = None
 
     worker_poll_s: float = 0.3
 

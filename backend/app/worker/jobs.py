@@ -81,7 +81,7 @@ def _synthesize_turn(settings: Settings, turn: Turn) -> None:
     rel = Path("sessions") / turn.session_id / turn.id
     res = tts.synthesize(settings, turn.text or "", _media(settings, rel))
     if res is not None:
-        turn.audio_path = str(rel.with_suffix(".m4a"))
+        turn.audio_path = str(rel.with_suffix(res.path.suffix))
         turn.audio_mime, turn.duration_ms = res.mime, res.duration_ms
     turn.status = "ready"
 
@@ -101,7 +101,7 @@ def process_turn(db: Session, job: Job, settings: Settings, model: ModelClient) 
 
     if "asr_text" not in state and turn.text and not turn.audio_path:
         state["asr_text"] = turn.text
-        job.state = state
+        job.state = dict(state)
         db.commit()
 
     if "asr_text" not in state:
@@ -113,7 +113,7 @@ def process_turn(db: Session, job: Job, settings: Settings, model: ModelClient) 
             raise JobFailed("no_speech", "Konuşmanız anlaşılamadı. Lütfen tekrar kaydedin.", False)
         state["asr_text"] = text
         turn.text = text
-        job.state = state
+        job.state = dict(state)
         db.commit()
 
     if "reply_text" not in state:
@@ -133,7 +133,7 @@ def process_turn(db: Session, job: Job, settings: Settings, model: ModelClient) 
                 state["out_of_role"].append(reply)
                 reply, ended = FALLBACK_REPLY, False  # sabit, rolde kalan cümle; job.state'te iz bırakır
         state.update(reply_text=reply, customer_ended=ended)
-        job.state = state
+        job.state = dict(state)
         db.commit()
 
     _stage(db, job, "synthesizing")
@@ -143,9 +143,13 @@ def process_turn(db: Session, job: Job, settings: Settings, model: ModelClient) 
         db.add(customer)
         db.flush()
         state["customer_turn_id"] = customer.id
-        job.state = state
+        job.state = dict(state)
         db.commit()
     customer.status = "processing"
+    # Yazılı çalışan cevabı da yönetici tarafından tur bazında dinlenebilir.
+    # Yüklenen özgün ses varsa onu koruruz.
+    if turn.text and not turn.audio_path:
+        _synthesize_turn(settings, turn)
     _synthesize_turn(settings, customer)
     turn.status = "ready"
     db.flush()
