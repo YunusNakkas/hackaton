@@ -33,6 +33,7 @@ export function PhoneCall({
   const [audioReady, setAudioReady] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [blocked, setBlocked] = useState(false);
+  const [ear, setEar] = useState(false);
   const customer = [...turns].reverse().find((turn) => turn.speaker === "customer");
   const mine = [...turns].reverse().find((turn) => turn.speaker === "employee" && turn.text);
   const src = customer?.has_audio ? `/api/v1/sessions/${sessionId}/turns/${customer.id}/audio` : "";
@@ -72,7 +73,16 @@ export function PhoneCall({
     });
   }, [audioReady, src, unheard, customer?.id]);
 
-  const listening = canTalk && !unheard && !playing && !blocked;
+  useEffect(() => {
+    if (unheard || playing || blocked || !canTalk) {
+      setEar(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setEar(true), 800);
+    return () => window.clearTimeout(timer);
+  }, [unheard, playing, blocked, canTalk, customer?.id]);
+
+  const listening = canTalk && !unheard && !playing && !blocked && ear;
   const line = blocked
     ? "Arama açık. Devam etmek için ekrana dokun."
     : unheard || playing
@@ -81,7 +91,9 @@ export function PhoneCall({
         ? "Müşteri cevap veriyor"
         : listening
           ? "Seni dinliyor. Sustuğunda söz ona geçer."
-          : "Hat kuruluyor";
+          : canTalk
+            ? "Sıra sana geliyor"
+            : "Hat kuruluyor";
 
   return (
     <section

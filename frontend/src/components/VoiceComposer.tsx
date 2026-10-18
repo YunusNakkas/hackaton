@@ -38,7 +38,15 @@ export function VoiceComposer({
   }, []);
 
   useEffect(() => {
-    void listMics().then(setMics).catch(() => setMics([]));
+    void listMics()
+      .then((next) => {
+        setMics(next);
+        const risky = next.some((mic) => mic.bluetooth);
+        const internal = next.find((mic) => mic.builtin || isBuiltinLabel(mic.label));
+        if (risky) setBluetooth(true);
+        if (risky && internal) setDeviceId((current) => current || internal.deviceId);
+      })
+      .catch(() => setMics([]));
   }, []);
 
   const selected = mics.find((mic) => mic.deviceId === deviceId);
@@ -48,6 +56,7 @@ export function VoiceComposer({
   async function refreshMics() {
     const next = await listMics();
     setMics(next);
+    if (next.some((mic) => mic.bluetooth)) setBluetooth(true);
   }
 
   async function upload(file: { blob: Blob; durationMs: number; filename: string; clientRequestId: string }) {
@@ -190,16 +199,15 @@ export function VoiceComposer({
 
       {warnBluetooth && (
         <p className="mt-2 text-sm text-warn">
-          Dahili mikrofon önerilir{deviceLabel ? ` (${deviceLabel})` : ""}.
-          {builtin && (
+          {isBluetoothLabel(deviceLabel || selected?.label || "")
+            ? `Kayıt ${deviceLabel || selected?.label || "Bluetooth mikrofonuna"} düşebilir. Dahili mikrofon önerilir.`
+            : "Listede iPhone veya Bluetooth mikrofon var. Kayıt dahili mikrofona alındı."}
+          {builtin && isBluetoothLabel(deviceLabel || selected?.label || "") && (
             <button
               type="button"
               className="ml-2 underline"
               disabled={recording || sending}
-              onClick={() => {
-                setDeviceId(builtin.deviceId);
-                setBluetooth(false);
-              }}
+              onClick={() => setDeviceId(builtin.deviceId)}
             >
               Dahiliye geç
             </button>
