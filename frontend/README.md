@@ -1,6 +1,6 @@
 # frontend/
 
-Çalışan arayüzü: giriş, eğitimler, sesli prova, değerlendirme. Yönetici inceleme uçları backend'de olmadığı için burada yok.
+Employee and manager UI: sign-in, trainings, written and phone practice, reports, assignments, and score review.
 
 Stack: React, TypeScript, Vite, Tailwind, TanStack Query, React Router, React Hook Form, Zod.
 
@@ -10,9 +10,9 @@ npm install
 npm run dev
 ```
 
-Vite `/api` isteklerini `http://127.0.0.1:8000` adresine iletir. API ve worker README'deki gibi ayakta olmalı. CORS kökeni `http://localhost:5173`.
+Vite proxies `/api` to `http://127.0.0.1:8000`. The API and the worker must already be running, as in the root README. CORS origin is `http://localhost:5173`.
 
-- İstekler `credentials: "include"` kullanır. Durum değiştiren istekler `X-Requested-With: provamusteri` taşır.
-- `/health` → `model_service: "stub"` ise üst barda "Demo modu" görünür.
-- Ses kaydı `MediaRecorder` ile yapılır; 30 saniyede kendisi durur.
-- Türler sözleşmeye göre elde tutulur. Yenilemek için: `npm run gen:api` (`src/api/schema.d.ts`).
+- Requests use `credentials: "include"`. State-changing requests send `X-Requested-With: provamusteri`.
+- When `/health` reports `model_service: "stub"`, the top bar shows demo mode.
+- Phone practice records with `MediaRecorder` and stops on its own after 30 seconds.
+- Types follow the contract. Regenerate them with `npm run gen:api` (`src/api/schema.d.ts`).

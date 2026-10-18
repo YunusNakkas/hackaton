@@ -1,91 +1,91 @@
 # ProvaMüşteri
 
-İşletmelerin kendi politika ve ölçütleriyle çalışan sesli müşteri provası ve yönetici inceleme platformu.
+[Türkçe](README.tr.md)
 
-> Durum: yönetici arayüzü ve çalışan yazılı prova akışı hazır. Gerçek modelle taslak → yayımlama → atama → prova → tur sesleri → gerekçeli puan düzeltme zinciri test edildi. Açık mavi ve lacivert temalar mevcut.
+Staff practice real customer conversations against their own store or hotel policies. A local Gemma 4 model plays the customer, transcribes the employee, and writes a scored report a manager can review.
 
-## Dizinler
+## What you can do
 
-| Dizin | Sahibi | İçerik |
-|---|---|---|
-| `contracts/` | backend (ortak inceleme) | Web API (`openapi.yaml`), model servisi sözleşmesi, fixture'lar |
-| `frontend/` | frontend | React + TS + Vite |
-| `backend/` | backend | FastAPI API + worker (SQLite, Alembic) |
-| `model-service/` | backend | Gemma'yı bir kez yükleyen servis (MLX 4-bit Mac'te, Transformers NVIDIA'da) |
-| `data/` | ortak | Senaryo, politika, rubrik (mağaza + otel, 6 senaryo) |
-| `eval/` | backend | S0 ölçümleri, gerçek modelle uçtan uca test |
-| `docs/` | ortak | `s0-spike.md` ölçüm sonuçları |
+- Six ready scenarios, three retail and three hotel. A manager can also draft new ones from the business's own rules.
+- Start a practice as a written chat or a hands-free phone call. On a call, the customer speaks, the microphone opens, and a short silence hands the turn back.
+- Open the same scenario as a **strict** customer: one short sentence, no extra information, and no softening until the employee states a concrete step that follows the written rule.
+- Easy, medium, and hard stay labels on the scenario. After a scored report, "try again" can make the customer harder on the weak rubric dimensions.
+- Male customers (`Bey`) are spoken with a male voice and female customers (`Hanım`) with a female voice.
+- Empty practices can be left without a score. History splits into ongoing, scored, and abandoned, and only abandoned ones can be deleted.
+- Managers see who is practicing now, listen to turns, and adjust a score with a reason.
 
-## Mimari
+## Stack
+
+| Piece | Role |
+|---|---|
+| React, TypeScript, Vite | Employee and manager UI |
+| FastAPI, SQLite, Alembic | API, jobs, media |
+| Gemma 4 E4B, 4-bit, MLX | Speech recognition, customer replies, scoring. Runs on the Mac, not a cloud API |
+| macOS `say` or Piper | Customer and employee turn audio |
+
+## Architecture
 
 ```
-tarayıcı ──HTTP/cookie──► API (FastAPI) ──SQLite (jobs tablosu)──► worker ──HTTP──► model-service (Gemma)
-                                 ▲                                    │
-                                 └──────── ses dosyaları (var/media) ◄┘── TTS (Piper / macOS say)
+browser ──HTTP/cookie──► API (FastAPI) ──SQLite jobs──► worker ──HTTP──► model-service (Gemma 4)
+                              ▲                            │
+                              └──────── audio (var/media) ◄┘── TTS (Piper / macOS say)
 ```
 
-API uzun model çağrısı yapmaz; işi kuyruğa yazar, `202 + job_id` döner. Worker işler, tarayıcı `GET /jobs/{id}` ile yoklar.
+The API does not call the model itself. It queues a job and returns `202` plus a `job_id`. The browser polls `GET /jobs/{id}`.
 
-## Yerel geliştirme (macOS)
+## Run it locally (macOS)
 
 ```bash
 cp .env.example .env
 
-# backend (Python 3.11+)
 cd backend
 python3.12 -m venv .venv && .venv/bin/pip install -e . pytest pyyaml "jsonschema[format]" openapi-spec-validator
 .venv/bin/alembic upgrade head && .venv/bin/python -m app.seed
 .venv/bin/uvicorn app.main:app --reload --port 8000     # terminal 1: API
 .venv/bin/python -m app.worker                          # terminal 2: worker
-.venv/bin/pytest -q                                      # testler (GPU'suz, stub model)
+.venv/bin/pytest -q                                      # tests use the stub model, no GPU
+
+cd ../frontend
+npm install && npm run dev                               # http://localhost:5173
 ```
 
-Demo kullanıcıları (şifre `.env` içindeki `PM_DEMO_PASSWORD`, boşsa `prova1234`):
-`mehmet@demo.test` (yönetici), `elif@demo.test`, `can@demo.test` (çalışan).
+Demo accounts (password is `PM_DEMO_PASSWORD`, or `prova1234` when that is empty):
 
-### Geçici şifre ve şifre yenileme
+- `mehmet@demo.test`, manager
+- `elif@demo.test` and `can@demo.test`, employees
 
-Yönetici çalışanı oluştururken bir geçici şifre belirler. Çalışan e-posta ve bu şifreyle giriş yapınca
-`/change-password` ekranına yönlenir; geçici şifresini tekrar doğrulayıp en az 8 karakterli yeni şifreyi
-iki kez girer. Yeni şifre öncekiyle aynı olamaz. Yenileme tamamlanmadan eğitim API'sine erişim de engellenir.
-Başarılı işlem eski şifreyi ve diğer açık oturumları geçersiz kılar; mevcut oturum güvenli cookie ile yenilenir.
-Üst menüdeki kilit simgesinden daha sonra da şifre değiştirilebilir.
+A manager sets a temporary password when creating an employee. The employee must replace it on first login at `/change-password` before the training API will answer. Managers are not forced through that step. There is no email reset; the person must know the current or temporary password.
 
-`b2d8e1f07a93` migration'ı mevcut çalışanları ilk şifre yenilemesine yönlendirir; kullanıcı şifrelerini değiştirmez.
-Yöneticiler bu zorunluluktan etkilenmez. Yeni kurulumda CLI ile oluşturulan demo çalışanları da ilk girişte şifre yeniler.
-Testlerde kullanılan `seed()` yardımcı fonksiyonu varsayılan olarak hazır test hesapları üretir.
+### Real model
 
-Şifre unutma/e-posta ile kurtarma bu akışın kapsamında değildir; kullanıcı mevcut veya geçici şifresini bilmelidir.
-
-### Gerçek model
-
-`.env` içinde `PM_MODEL_MODE=real` yapın ve model servisini başlatın (ilk açılış modeli indirir, ~5 GB; sonrakiler ~10 sn):
+Set `PM_MODEL_MODE=real` and start the model service. The first launch downloads about 5 GB. Later launches take about 10 seconds.
 
 ```bash
 cd model-service
 python3.12 -m venv .venv-mlx && .venv-mlx/bin/pip install -e ".[mlx]"
-.venv-mlx/bin/uvicorn app.main:app --port 8100 --env-file ../.env   # terminal 3
+.venv-mlx/bin/uvicorn app.main:app --port 8100 --env-file ../.env
 ```
 
-Mac'te Gemma 4 E4B 4-bit (MLX, ~5,4 GB) kullanılır; NVIDIA için `model-service/README.md`. Ölçümler: `docs/s0-spike.md`.
+On a Mac this is Gemma 4 E4B 4-bit (`mlx-community/gemma-4-e4b-it-4bit`, about 5.4 GB). NVIDIA setup is in `model-service/README.md`. Measurements are in `docs/s0-spike.md`.
 
-Gerçek modelle duman testleri (geçici veritabanı kullanır): `backend/.venv/bin/python eval/e2e_real.py` (sesli oturum), `eval/draft_real.py` (taslak üretimi)
+`PM_MODEL_MODE=stub` keeps the API honest for UI work. Replies are labeled `[stub]` and the history shows them as a fake score, not a real one. `GET /api/v1/health` then reports `model_service: "stub"`.
 
-### Frontend için
+Smoke tests against the real model use a temporary database: `backend/.venv/bin/python eval/e2e_real.py` and `eval/draft_real.py`.
 
-Frontend geliştirmesi gerçek modeli beklemez: `PM_MODEL_MODE=stub` ile API gerçek davranır, model cevapları `[stub]` etiketlidir. `/api/v1/health` → `model_service: "stub"`.
+### Voices
 
-### Windows/Linux Türkçe tur sesleri
+On macOS, `PM_TTS_PROVIDER=local`. `PM_TTS_VOICE` (default `Yelda`) is the female voice. `PM_TTS_VOICE_MALE` (default `Cem`) is the male voice. If the male voice is missing, synthesis falls back to the default voice.
 
-`backend/.venv/Scripts/python.exe -m pip install -e "./backend[tts]"` ile isteğe bağlı Piper bağımlılığını kurun.
-[Türkçe ses modelini](https://huggingface.co/rhasspy/piper-voices/tree/main/tr/tr_TR/dfki/medium) indirin: `.onnx` ve `.onnx.json` aynı klasörde olmalı.
-`.env` içinde `PM_TTS_PROVIDER=piper` ve `PM_TTS_MODEL_PATH=<mutlak model dosyası yolu>` ayarlayıp API ve worker'ı yeniden başlatın.
-Yeni yazılı turların hem çalışan hem müşteri metinleri WAV olarak saklanır ve yetkili kullanıcı tarafından dinlenir. Önceden oluşturulmuş sessiz oturumlara geriye dönük ses eklenmez.
+On Windows or Linux, install the optional Piper extra and a Turkish voice model:
 
-Ses modeli [MODEL_CARD](https://huggingface.co/rhasspy/piper-voices/blob/main/tr/tr_TR/dfki/medium/MODEL_CARD) içinde CC BY-NC-SA 4.0 veri kümesi lisansı belirtir; ticari kullanım için uygun lisanslı bir ses modeli seçilmelidir. Piper yazılımı GPL lisanslıdır.
+```bash
+backend/.venv/Scripts/python.exe -m pip install -e "./backend[tts]"
+```
 
-Tam yönetici akışı testi: `backend/.venv/Scripts/python.exe eval/manager_flow_real.py`. Gerçek model servisi ve Piper ses modeli gerekir; test geçici DB/media kullanır. İsteğe bağlı yeni bir çıktı klasörü argümanı test verilerini tarayıcıda incelemek için saklar.
+Put the [Turkish Piper voice](https://huggingface.co/rhasspy/piper-voices/tree/main/tr/tr_TR/dfki/medium) `.onnx` and `.onnx.json` in the same folder, then set `PM_TTS_PROVIDER=piper` and `PM_TTS_MODEL_PATH` to the model file. Piper is one voice, so it does not switch gender. That voice's [model card](https://huggingface.co/rhasspy/piper-voices/blob/main/tr/tr_TR/dfki/medium/MODEL_CARD) uses a CC BY-NC-SA 4.0 dataset. Piper itself is GPL.
 
-## Proje lisansı
+Restart the API and the worker after changing `.env`. New turns are stored as audio. Older silent sessions are not backfilled.
 
-Uygulama kodu [MIT](LICENSE) lisanslıdır. Gemma model ağırlıkları Gemma kullanım koşullarına, Piper ses verisi kendi model kartındaki lisansa tabidir; bu dosya onları kapsamaz.
+## License
+
+Application code is [MIT](LICENSE). Gemma weights stay under the Gemma Terms of Use. The Piper voice stays under its model card. This repository's license does not cover either of those.
