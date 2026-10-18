@@ -1,10 +1,20 @@
 import React, { createContext, useContext, useLayoutEffect, useState } from "react";
 
-type Theme = "light" | "dark";
+export type Theme = "light" | "dark" | "quartz" | "charcoal";
+
+export const themeLogo = (theme: Theme) =>
+  theme === "quartz" || theme === "charcoal" ? "/logo-orange.png"
+    : theme === "dark" ? "/logo-light-blue.png" : "/logo-blue.png";
+
+export const themes: { id: Theme; name: string; background: string; accent: string }[] = [
+  { id: "light", name: "Açık mavi", background: "#F0F7FF", accent: "#0284C7" },
+  { id: "dark", name: "Lacivert", background: "#080F24", accent: "#38BDF8" },
+  { id: "quartz", name: "Kuvars · Turuncu", background: "#F5F1ED", accent: "#C2410C" },
+  { id: "charcoal", name: "Koyu gri · Turuncu", background: "#141414", accent: "#FB923C" },
+];
 
 interface ThemeContextType {
   theme: Theme;
-  toggleTheme: () => void;
   setTheme: (theme: Theme) => void;
 }
 
@@ -13,14 +23,16 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(() => {
     const saved = localStorage.getItem("pm_theme") as Theme | null;
-    if (saved === "light" || saved === "dark") return saved;
+    if (themes.some(option => option.id === saved)) return saved as Theme;
     return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   });
 
   useLayoutEffect(() => {
     const root = document.documentElement;
     root.setAttribute("data-theme", theme);
-    if (theme === "dark") {
+    document.querySelector('link[rel="icon"]')?.setAttribute("href", themeLogo(theme));
+    document.querySelector('link[rel="apple-touch-icon"]')?.setAttribute("href", themeLogo(theme));
+    if (theme === "dark" || theme === "charcoal") {
       root.classList.add("dark");
     } else {
       root.classList.remove("dark");
@@ -28,16 +40,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem("pm_theme", theme);
   }, [theme]);
 
-  const toggleTheme = () => {
-    setThemeState((prev) => (prev === "light" ? "dark" : "light"));
-  };
-
   const setTheme = (t: Theme) => {
     setThemeState(t);
   };
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme, setTheme }}>
+    <ThemeContext.Provider value={{ theme, setTheme }}>
       {children}
     </ThemeContext.Provider>
   );

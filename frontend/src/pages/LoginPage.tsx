@@ -6,7 +6,8 @@ import { useNavigate } from "react-router-dom";
 import { z } from "zod";
 import { api, isApiError } from "../api/client";
 import type { Me } from "../api/types";
-import { useTheme } from "../lib/theme";
+import { ThemePicker } from "../components/ThemePicker";
+import { BrandLogo } from "../components/BrandLogo";
 
 const schema = z.object({
   email: z.email("Geçerli bir e-posta girin"),
@@ -18,7 +19,6 @@ type FormValues = z.infer<typeof schema>;
 export function LoginPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { theme, toggleTheme } = useTheme();
   const [formError, setFormError] = useState<string | null>(null);
   const {
     register,
@@ -47,23 +47,13 @@ export function LoginPage() {
       <section className="relative hidden flex-col justify-between p-12 lg:flex border-r border-line bg-gradient-to-b from-card-subtle/50 to-transparent">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="h-9 w-9 rounded-xl bg-gradient-to-tr from-primary to-sky-400 text-white flex items-center justify-center font-bold text-base shadow-sm">
-              P
-            </div>
+            <BrandLogo />
             <span className="font-serif text-2xl font-semibold tracking-tight text-ink">
               ProvaMüşteri
             </span>
           </div>
 
-          <button
-            type="button"
-            aria-label="Temayı değiştir"
-            onClick={toggleTheme}
-            title={theme === "dark" ? "Açık Tema (Çok Açık Mavi)" : "Karanlık Tema (Lacivert)"}
-            className="flex items-center justify-center h-9 w-9 rounded-full border border-line bg-card text-ink hover:border-primary/40 transition-colors"
-          >
-            {theme === "dark" ? "☀️" : "🌙"}
-          </button>
+          <ThemePicker />
         </div>
 
         <div className="max-w-lg py-12">
@@ -100,19 +90,10 @@ export function LoginPage() {
         <div className="w-full max-w-sm">
           <div className="flex items-center justify-between lg:hidden mb-8">
             <div className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-xl bg-primary text-white flex items-center justify-center font-bold text-sm">
-                P
-              </div>
+              <BrandLogo />
               <span className="font-serif text-xl font-semibold text-ink">ProvaMüşteri</span>
             </div>
-            <button
-              type="button"
-              aria-label="Temayı değiştir"
-            onClick={toggleTheme}
-              className="flex items-center justify-center h-8 w-8 rounded-full border border-line bg-card-subtle text-ink"
-            >
-              {theme === "dark" ? "☀️" : "🌙"}
-            </button>
+            <ThemePicker />
           </div>
 
           <h2 className="font-serif text-3xl font-semibold text-ink">Giriş Yap</h2>
