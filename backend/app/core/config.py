@@ -26,7 +26,8 @@ class Settings(BaseSettings):
 
     # piper: yerel ONNX ses modeli. local: macOS `say`. none: ses üretilmez.
     tts_provider: Literal["local", "piper", "none"] = "none"
-    tts_voice: str = "Yelda"
+    tts_voice: str = "Yelda"  # kadın müşteri, macOS `say`
+    tts_voice_male: str = "Cem"  # erkek müşteri
     tts_model_path: Path | None = None
 
     worker_poll_s: float = 0.3
