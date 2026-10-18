@@ -21,6 +21,25 @@ export function ReportView({
   report: EvaluationReport;
   onPracticeAgain?: () => void;
 }) {
+  if (report.model_run.runtime === "stub") {
+    return (
+      <section className="space-y-4">
+        <div className="rounded-2xl border border-warn/40 bg-warn-soft p-5">
+          <p className="text-sm font-semibold text-warn">Sahte model raporu</p>
+          <p className="mt-2 text-sm">
+            Bu prova, gerçek model bağlanmadan puanlandı. Sayılar ve alıntılar görüşmeyi yansıtmaz.
+            Aynı senaryoyu şimdi tekrar açarsan puan gerçek modelden gelir.
+          </p>
+        </div>
+        {onPracticeAgain && (
+          <button type="button" onClick={onPracticeAgain} className="rounded-full bg-ink px-4 py-2 text-sm text-paper">
+            Tekrar dene
+          </button>
+        )}
+      </section>
+    );
+  }
+
   const total = report.effective_total;
   const adjustments = new Map(report.manager_review?.adjustments.map(a => [a.dimension_id, a]) ?? []);
   const dimensions = report.dimensions.map(d => {
@@ -46,9 +65,6 @@ export function ReportView({
             )}
           </p>
         </div>
-        {report.model_run.runtime === "stub" && (
-          <p className="text-sm text-warn">Puanlar sahte modelden. Gerçek değerlendirme değil.</p>
-        )}
       </div>
 
       {report.manager_review && <div className="rounded-2xl border border-line bg-pine-soft p-4 text-sm"><p className="font-semibold text-pine">Yönetici incelemesi: {report.manager_review.decision === "approved" ? "Onaylandı" : "Puanlar düzeltildi"}</p><p className="mt-1 text-muted">{report.manager_review.reviewer.display_name} · {new Date(report.manager_review.created_at).toLocaleString("tr-TR")}</p>{report.manager_review.comment && <p className="mt-2 whitespace-pre-wrap">{report.manager_review.comment}</p>}</div>}

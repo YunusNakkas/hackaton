@@ -1,10 +1,14 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { api, allPages } from "../api/client";
+import { api, allPages, isApiError } from "../api/client";
 import type { AdminOverview, Assignment, Me, SessionSummary, TrainingSummary } from "../api/types";
-import { assignmentLabel, difficultyLabel, formatDue, sectorLabel } from "../lib/labels";
+import { assignmentLabel, channelLabel, difficultyLabel, formatDue, sectorLabel, summaryOutcome } from "../lib/labels";
 
 export function HomePage() {
+  const queryClient = useQueryClient();
+  const [dropping, setDropping] = useState<string | null>(null);
+  const [dropError, setDropError] = useState<string | null>(null);
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<Me>("/me") });
   const isManager = me.data?.user.role === "manager";
 
@@ -28,6 +32,20 @@ export function HomePage() {
     enabled: isManager,
     queryFn: () => api<AdminOverview>("/admin/overview"),
   });
+
+  async function dropSession(id: string) {
+    setDropping(id);
+    setDropError(null);
+    try {
+      await api(`/sessions/${id}/abandon`, { method: "POST" });
+      await queryClient.invalidateQueries({ queryKey: ["my-sessions"] });
+      await queryClient.invalidateQueries({ queryKey: ["assignments"] });
+    } catch (error) {
+      setDropError(isApiError(error) ? error.message : "Prova bırakılamadı.");
+    } finally {
+      setDropping(null);
+    }
+  }
 
   const first = me.data?.user.display_name.split(" ")[0];
 
@@ -77,6 +95,12 @@ export function HomePage() {
                     {adminOverview.data.open_assignments}
                   </span>
                   <span className="text-xs text-muted">Açık Atama</span>
+                </div>
+                <div className="border-l border-line pl-4">
+                  <span className="font-serif text-2xl font-bold text-ink mr-1.5">
+                    {adminOverview.data.active_sessions}
+                  </span>
+                  <span className="text-xs text-muted">Süren prova</span>
                 </div>
                 <div className="border-l border-line pl-4">
                   <span className="font-serif text-2xl font-bold text-warn mr-1.5">
@@ -186,28 +210,35 @@ export function HomePage() {
         {history.data && history.data.items.length === 0 && (
           <p className="text-sm text-muted">Henüz prova yok.</p>
         )}
+        {dropError && <p className="text-sm text-accent">{dropError}</p>}
         <div className="grid gap-3">
           {history.data?.items.map((item) => {
-            const score =
-              item.total?.complete && item.total.score != null
-                ? `${item.total.score} / ${item.total.max_score}`
-                : item.status === "finished"
-                  ? "Puan yok"
-                  : "Sürüyor";
+            const canDrop = item.status === "active" && item.employee_turn_count === 0;
             return (
-              <Link
+              <div
                 key={item.id}
-                to={`/sessions/${item.id}`}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-line bg-card px-5 py-4 hover:border-primary/40"
+                className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-line bg-card px-5 py-4"
               >
-                <div>
+                <Link to={`/sessions/${item.id}`} className="min-w-0 flex-1 hover:text-primary">
                   <p className="text-xs text-muted">
-                    {sectorLabel(item.training.sector)} · {new Date(item.started_at).toLocaleString("tr-TR")}
+                    {sectorLabel(item.training.sector)} · {channelLabel(item.channel)} · {new Date(item.started_at).toLocaleString("tr-TR")}
                   </p>
                   <p className="mt-0.5 text-lg">{item.training.title}</p>
+                </Link>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-semibold text-primary">{summaryOutcome(item)}</span>
+                  {canDrop && (
+                    <button
+                      type="button"
+                      disabled={dropping === item.id}
+                      onClick={() => void dropSession(item.id)}
+                      className="rounded-full border border-line px-3 py-1 text-xs text-muted hover:text-ink disabled:opacity-40"
+                    >
+                      {dropping === item.id ? "Bırakılıyor" : "Bırak"}
+                    </button>
+                  )}
                 </div>
-                <span className="text-sm font-semibold text-primary">{score}</span>
-              </Link>
+              </div>
             );
           })}
         </div>

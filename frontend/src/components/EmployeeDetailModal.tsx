@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import type { EmployeeDetail } from "../api/types";
-import { assignmentLabel, formatDue, sectorLabel } from "../lib/labels";
+import { assignmentLabel, channelLabel, formatDue, sectorLabel, summaryOutcome } from "../lib/labels";
 
 interface EmployeeDetailModalProps {
   employeeId: string | null;
@@ -84,10 +84,14 @@ export function EmployeeDetailModal({
           ) : (
             <>
               {/* İstatistikler */}
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <div className="rounded-2xl border border-line bg-card-subtle p-4 text-center">
                   <p className="text-xs text-muted uppercase tracking-wider">Açık Atama</p>
                   <p className="mt-1 font-serif text-2xl text-ink">{data.open_assignments}</p>
+                </div>
+                <div className="rounded-2xl border border-line bg-card-subtle p-4 text-center">
+                  <p className="text-xs text-muted uppercase tracking-wider">Süren prova</p>
+                  <p className="mt-1 font-serif text-2xl text-ink">{data.active_sessions}</p>
                 </div>
                 <div className="rounded-2xl border border-line bg-card-subtle p-4 text-center">
                   <p className="text-xs text-muted uppercase tracking-wider">Tamamlanan Prova</p>
@@ -189,17 +193,11 @@ export function EmployeeDetailModal({
                         <div>
                           <p className="font-medium text-ink">{s.training.title}</p>
                           <p className="text-xs text-muted">
-                            {new Date(s.started_at).toLocaleDateString("tr-TR")} · {s.employee_turn_count} tur
+                            {channelLabel(s.channel)} · {new Date(s.started_at).toLocaleDateString("tr-TR")} · {s.employee_turn_count} tur
                           </p>
                         </div>
                         <div className="text-right">
-                          {s.total ? (
-                            <p className="font-serif text-base font-semibold text-primary">
-                              {s.total.score ?? "-"} / {s.total.max_score}
-                            </p>
-                          ) : (
-                            <span className="block text-xs text-muted">Devam ediyor</span>
-                          )}
+                          <p className="font-serif text-base font-semibold text-primary">{summaryOutcome(s)}</p>
                           <span className="mt-0.5 block text-xs text-primary">İncele →</span>
                         </div>
                       </Link>

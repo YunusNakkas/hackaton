@@ -1,4 +1,4 @@
-import type { AssignmentStatus, Difficulty, EvaluationStatus, JobStatus, Speaker } from "../api/types";
+import type { AssignmentStatus, Difficulty, EvaluationStatus, JobStatus, PracticeChannel, SessionSummary, Speaker } from "../api/types";
 
 export const difficultyLabel: Record<Difficulty, string> = {
   easy: "Kolay",
@@ -63,6 +63,18 @@ export function formatWhen(iso: string | null | undefined) {
 export function formatDue(iso: string | null) {
   if (!iso) return null;
   return new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "long" }).format(new Date(iso));
+}
+
+export function channelLabel(channel: PracticeChannel) {
+  return channel === "phone" ? "Telefon" : "Mesaj";
+}
+
+export function summaryOutcome(item: Pick<SessionSummary, "model_runtime" | "status" | "evaluation_status" | "total">) {
+  if (item.model_runtime === "stub") return "Sahte puan";
+  if (item.status === "finished" && item.evaluation_status == null) return "Bırakıldı";
+  if (item.total?.complete && item.total.score != null) return `${item.total.score} / ${item.total.max_score}`;
+  if (item.status === "finished") return "Puan yok";
+  return "Sürüyor";
 }
 
 export function formatClock(ms: number) {
