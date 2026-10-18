@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import ApiError
 from app.core.ids import iso
-from app.models import Assignment, Job, Organization, PracticeSession, Training, Turn, User
+from app.models import Assignment, Evaluation, Job, Organization, PracticeSession, Training, Turn, User
 
 ACTIVE_JOB_STATES = ("queued", "transcribing", "generating", "synthesizing", "evaluating")
 JOB_POLL_MS = {"opening": 500, "turn": 750, "evaluation": 2000, "draft_generation": 2000, "policy_extraction": 2000}
@@ -182,20 +182,34 @@ def session_summary(db: Session, s: PracticeSession) -> dict[str, Any]:
         "id": s.id, "training": training_summary(db.get(Training, s.training_id)),
         "employee": {"id": emp.id, "display_name": emp.display_name},
         "status": s.status, "evaluation_status": ev_status, "review_status": review_status,
+        "channel": s.channel,
         "total": effective_total(db, s), "employee_turn_count": turns, "practice_mode": s.practice_mode,
+        "model_runtime": _model_runtime(db, s),
         "started_at": iso(s.started_at), "finished_at": iso(s.finished_at),
     }
+
+
+def _model_runtime(db: Session, s: PracticeSession) -> str | None:
+    ev = db.get(Evaluation, s.id)
+    if ev is None or not ev.report:
+        return None
+    return (ev.report.get("model_run") or {}).get("runtime")
 
 
 def employee_json(db: Session, u: User) -> dict[str, Any]:
     open_count = (db.query(Assignment)
                   .filter(Assignment.employee_id == u.id, Assignment.status.in_(("assigned", "in_progress"))).count())
-    finished = db.query(PracticeSession).filter_by(employee_id=u.id, status="finished")
+    completed = (db.query(PracticeSession)
+                 .filter_by(employee_id=u.id, status="finished")
+                 .join(Evaluation, Evaluation.session_id == PracticeSession.id)
+                 .count())
+    active_sessions = db.query(PracticeSession).filter_by(employee_id=u.id, status="active").count()
     last = db.query(PracticeSession.started_at).filter_by(employee_id=u.id).order_by(PracticeSession.id.desc()).first()
     return {
         "id": u.id, "email": u.email, "display_name": u.display_name, "active": u.active,
         "created_at": iso(u.created_at), "open_assignments": open_count,
-        "completed_sessions": finished.count(), "last_session_at": iso(last[0]) if last else None,
+        "active_sessions": active_sessions,
+        "completed_sessions": completed, "last_session_at": iso(last[0]) if last else None,
     }
 
 

@@ -769,7 +769,15 @@ export interface components {
             session_id: components["schemas"]["Id"];
             evaluation_job_id: components["schemas"]["Id"];
         };
+        AbandonAccepted: {
+            session_id: components["schemas"]["Id"];
+        };
         SessionSummary: {
+            channel: components["schemas"]["PracticeChannel"];
+            /**
+             * @description Raporu üreten çalışma zamanı. `stub` ise puan gerçektir sayılmaz. Rapor yoksa null.
+             */
+            model_runtime: string | null;
             /** @description Tekrar oturumuysa modu; değilse null. */
             practice_mode: components["schemas"]["PracticeMode"] | null;
             id: components["schemas"]["Id"];
@@ -976,6 +984,8 @@ export interface components {
             completed_assignments: number;
             sessions_pending_review: number;
             sessions_last_7_days: number;
+            /** @description Katalogdan veya atamadan açılmış, henüz kapanmamış provalar. */
+            active_sessions: number;
         };
         Employee: {
             id: components["schemas"]["Id"];
@@ -985,6 +995,7 @@ export interface components {
             active: boolean;
             created_at: components["schemas"]["Timestamp"];
             open_assignments: number;
+            active_sessions: number;
             completed_sessions: number;
             last_session_at: components["schemas"]["Timestamp"] | null;
         };

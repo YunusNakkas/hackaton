@@ -70,8 +70,41 @@ def test_employee_lists_only_own_sessions(elif_client, can_client):
     created = _start(elif_client)
     page = elif_client.get("/api/v1/sessions").json()
     assert_contract("SessionSummaryPage", page)
-    assert created["session"]["id"] in {item["id"] for item in page["items"]}
+    row = next(item for item in page["items"] if item["id"] == created["session"]["id"])
+    assert row["channel"] == "message" and row["model_runtime"] is None
     assert can_client.get("/api/v1/sessions").json()["items"] == []
+
+
+def test_empty_session_can_be_abandoned(elif_client):
+    created = _start(elif_client)
+    sid = created["session"]["id"]
+    blocked = elif_client.post(f"/api/v1/sessions/{sid}/finish", headers=CSRF)
+    assert blocked.status_code == 409
+
+    left = elif_client.post(f"/api/v1/sessions/{sid}/abandon", headers=CSRF)
+    assert left.status_code == 200, left.text
+    assert_contract("AbandonAccepted", left.json())
+    assert elif_client.post(f"/api/v1/sessions/{sid}/abandon", headers=CSRF).status_code == 200
+
+    session = elif_client.get(f"/api/v1/sessions/{sid}").json()
+    assert session["status"] == "finished" and session["evaluation_status"] is None
+    assert elif_client.get(f"/api/v1/sessions/{sid}/evaluation").status_code == 409
+    assignment = next(item for item in elif_client.get("/api/v1/assignments").json()["items"]
+                      if item["id"] == created["session"]["assignment_id"])
+    assert assignment["status"] == "assigned"
+
+
+def test_abandon_rejects_a_session_that_has_a_reply(elif_client):
+    created = _start(elif_client)
+    sid = created["session"]["id"]
+    sent = elif_client.post(f"/api/v1/sessions/{sid}/messages", headers=CSRF, json={
+        "text": "Kart ekstresiyle kaydı bulup iadeyi karta yapabiliriz.",
+        "client_request_id": str(uuid.uuid4())})
+    assert sent.status_code == 202, sent.text
+    assert run_once()
+    res = elif_client.post(f"/api/v1/sessions/{sid}/abandon", headers=CSRF)
+    assert res.status_code == 409
+    assert res.json()["error"]["code"] == "conflict"
 
 
 def test_text_message_skips_asr_and_gets_a_reply(elif_client):
@@ -170,6 +203,8 @@ def test_full_voice_turn_and_evaluation_flow(elif_client):
                                "scored_dimensions": 4, "total_dimensions": 4}
     assert "short_session" in report["flags"]
     assert report["model_run"]["runtime"] == "stub"
+    listed = next(item for item in elif_client.get("/api/v1/sessions").json()["items"] if item["id"] == session["id"])
+    assert listed["model_runtime"] == "stub"
 
     a = elif_client.get("/api/v1/assignments").json()["items"][0]
     assert a["status"] == "completed" and a["completed_session_id"] == session["id"]

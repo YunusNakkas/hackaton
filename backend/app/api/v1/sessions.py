@@ -297,6 +297,31 @@ def finish_session(session_id: str, user: User = Depends(current_user), db: Sess
     return {"session_id": s.id, "evaluation_job_id": job.id}
 
 
+@router.post("/sessions/{session_id}/abandon")
+def abandon_session(session_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Cevap verilmemiş provayı puan üretmeden kapatır. Atama varsa yeniden açılır."""
+    s = _own_session(db, user, session_id)
+    if s.status != "active":
+        return {"session_id": s.id}
+    active = _active_job(db, s.id)
+    if active is not None and active.kind != "opening":
+        raise conflict("turn_in_progress", "Son cevabınız işlenirken prova bırakılamaz.")
+    if db.query(Turn).filter_by(session_id=s.id, speaker="employee", status="ready").count() > 0:
+        raise conflict("conflict", "Bu provada cevap var. Bitirerek değerlendirebilirsin.")
+
+    s.status, s.finished_at = "finished", utcnow()
+    if s.assignment_id:
+        assignment = db.get(Assignment, s.assignment_id)
+        still_open = db.query(PracticeSession).filter(
+            PracticeSession.assignment_id == s.assignment_id, PracticeSession.status == "active",
+        ).count()
+        if (assignment is not None and assignment.status == "in_progress"
+                and assignment.completed_session_id is None and still_open == 0):
+            assignment.status = "assigned"
+    db.commit()
+    return {"session_id": s.id}
+
+
 @router.get("/sessions/{session_id}/evaluation")
 def get_evaluation(session_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
     s = _visible_session(db, user, session_id)
