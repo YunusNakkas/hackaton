@@ -88,4 +88,4 @@ Tam yönetici akışı testi: `backend/.venv/Scripts/python.exe eval/manager_flo
 
 ## Proje lisansı
 
-Henüz seçilmedi. Gemma kullanım koşullarıyla uyumlu bir lisans seçilip `LICENSE` eklenecek.
+Uygulama kodu [MIT](LICENSE) lisanslıdır. Gemma model ağırlıkları Gemma kullanım koşullarına, Piper ses verisi kendi model kartındaki lisansa tabidir; bu dosya onları kapsamaz.
