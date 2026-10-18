@@ -97,7 +97,7 @@ export function PhoneCall({
 
   return (
     <section
-      className="mt-4 flex min-h-0 flex-1 flex-col justify-between overflow-y-auto rounded-[2rem] bg-[#0c1e3a] px-6 py-8 text-[#f0f7ff]"
+      className="mt-4 flex min-h-0 flex-1 flex-col justify-between overflow-y-auto rounded-[2rem] bg-[var(--pm-call)] px-6 py-8 text-[#f0f7ff]"
       onClick={() => {
         if (!blocked || !audio.current) return;
         void audio.current.play().then(

@@ -48,6 +48,7 @@ export function ThemePicker() {
       }}>
       <p className="px-3 py-2 text-xs font-semibold text-muted">Renk teması</p>
       {themes.map(option => <button key={option.id} type="button" role="menuitemradio" aria-checked={theme === option.id}
+        tabIndex={theme === option.id ? 0 : -1}
         className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm hover:bg-card-subtle ${theme === option.id ? "bg-card-subtle font-semibold" : ""}`}
         onClick={() => { setTheme(option.id); close(); }}>
         <span aria-hidden="true" className="flex h-7 w-7 shrink-0 overflow-hidden rounded-full border border-line" style={{ backgroundColor: option.background }}><span className="ml-auto w-1/2" style={{ backgroundColor: option.accent }} /></span>
