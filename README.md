@@ -43,6 +43,20 @@ python3.12 -m venv .venv && .venv/bin/pip install -e . pytest pyyaml "jsonschema
 Demo kullanıcıları (şifre `.env` içindeki `PM_DEMO_PASSWORD`, boşsa `prova1234`):
 `mehmet@demo.test` (yönetici), `elif@demo.test`, `can@demo.test` (çalışan).
 
+### Geçici şifre ve şifre yenileme
+
+Yönetici çalışanı oluştururken bir geçici şifre belirler. Çalışan e-posta ve bu şifreyle giriş yapınca
+`/change-password` ekranına yönlenir; geçici şifresini tekrar doğrulayıp en az 8 karakterli yeni şifreyi
+iki kez girer. Yeni şifre öncekiyle aynı olamaz. Yenileme tamamlanmadan eğitim API'sine erişim de engellenir.
+Başarılı işlem eski şifreyi ve diğer açık oturumları geçersiz kılar; mevcut oturum güvenli cookie ile yenilenir.
+Üst menüdeki kilit simgesinden daha sonra da şifre değiştirilebilir.
+
+`b2d8e1f07a93` migration'ı mevcut çalışanları ilk şifre yenilemesine yönlendirir; kullanıcı şifrelerini değiştirmez.
+Yöneticiler bu zorunluluktan etkilenmez. Yeni kurulumda CLI ile oluşturulan demo çalışanları da ilk girişte şifre yeniler.
+Testlerde kullanılan `seed()` yardımcı fonksiyonu varsayılan olarak hazır test hesapları üretir.
+
+Şifre unutma/e-posta ile kurtarma bu akışın kapsamında değildir; kullanıcı mevcut veya geçici şifresini bilmelidir.
+
 ### Gerçek model
 
 `.env` içinde `PM_MODEL_MODE=real` yapın ve model servisini başlatın (ilk açılış modeli indirir, ~5 GB; sonrakiler ~10 sn):

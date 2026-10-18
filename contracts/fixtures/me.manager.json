@@ -4,7 +4,8 @@
     "email": "mehmet@demo-magaza.test",
     "display_name": "Mehmet Demir",
     "role": "manager",
-    "active": true
+    "active": true,
+    "must_change_password": false
   },
   "organization": { "id": "01JA00000000000000000000G1", "name": "Demo Mağaza" }
 }

@@ -36,6 +36,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/change-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Geçici veya mevcut şifreyi doğrular, yeni şifre belirler. Diğer oturumlar iptal edilir, mevcut cookie yenilenir. Geçici şifreli kullanıcılar bu işlem tamamlanmadan eğitim uçlarını kullanamaz. */
+        post: operations["changePassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/logout": {
         parameters: {
             query?: never;
@@ -124,7 +141,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * @description Giriş yapan çalışanın kendi prova oturumları, yeniden eskiye. Başkasının oturumu dönmez.
+         *     `bucket` ile süren, raporlu veya bırakılmış oturumlar ayrılır; `channel` mesaj/telefon ayırır.
+         */
+        get: operations["listMySessions"];
         put?: never;
         /**
          * @description Senaryo, politika, rubrik ve prompt sürümlerini sabitleyerek prova başlatır.
@@ -240,6 +261,27 @@ export interface paths {
          *     tekrar çağrılırsa aynı `evaluation_job_id` döner. İşlenmekte olan tur varsa 409.
          */
         post: operations["finishSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{sessionId}/abandon": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Cevap verilmemiş aktif provayı puan üretmeden kapatır. Atama bu yüzden
+         *     `in_progress` olduysa yeniden `assigned` olur. Zaten kapalıysa aynı sonucu döner.
+         *     Hazır bir çalışan cevabı varsa 409; o oturum `finish` ile değerlendirilir.
+         */
+        post: operations["abandonSession"];
         delete?: never;
         options?: never;
         head?: never;
@@ -574,7 +616,7 @@ export interface components {
             };
         };
         /** @enum {string} */
-        ErrorCode: "unauthorized" | "invalid_credentials" | "forbidden" | "csrf_header_missing" | "not_found" | "conflict" | "turn_in_progress" | "session_not_active" | "evaluation_not_ready" | "version_mismatch" | "email_taken" | "job_not_retryable" | "payload_too_large" | "unsupported_media_type" | "audio_too_short" | "audio_too_long" | "audio_undecodable" | "no_speech" | "image_undecodable" | "audio_unsupported" | "validation_error" | "rate_limited" | "model_unavailable" | "internal_error";
+        ErrorCode: "password_change_required" | "invalid_current_password" | "password_changed" | "unauthorized" | "invalid_credentials" | "forbidden" | "csrf_header_missing" | "not_found" | "conflict" | "turn_in_progress" | "session_not_active" | "evaluation_not_ready" | "version_mismatch" | "email_taken" | "job_not_retryable" | "payload_too_large" | "unsupported_media_type" | "audio_too_short" | "audio_too_long" | "audio_undecodable" | "no_speech" | "image_undecodable" | "audio_unsupported" | "validation_error" | "rate_limited" | "model_unavailable" | "internal_error";
         Health: {
             /** @enum {string} */
             status: "ok" | "degraded";
@@ -599,6 +641,11 @@ export interface components {
             email: string;
             password: string;
         };
+        ChangePasswordRequest: {
+            current_password: string;
+            new_password: string;
+            confirm_password: string;
+        };
         User: {
             id: components["schemas"]["Id"];
             /** Format: email */
@@ -606,6 +653,8 @@ export interface components {
             display_name: string;
             role: components["schemas"]["Role"];
             active: boolean;
+            /** @description Geçici şifre yenilenmeden eğitime devam edilemez. */
+            must_change_password: boolean;
         };
         Organization: {
             id: components["schemas"]["Id"];
@@ -647,11 +696,17 @@ export interface components {
         };
         /** @enum {string} */
         AssignmentStatus: "assigned" | "in_progress" | "completed";
+        /**
+         * @description `message` yazılı prova, `phone` karşılıklı telefon simülasyonu.
+         * @enum {string}
+         */
+        PracticeChannel: "message" | "phone";
         Assignment: {
             id: components["schemas"]["Id"];
             training: components["schemas"]["TrainingSummary"];
             employee_id: components["schemas"]["Id"];
             status: components["schemas"]["AssignmentStatus"];
+            channel: components["schemas"]["PracticeChannel"];
             assigned_at: components["schemas"]["Timestamp"];
             due_at: components["schemas"]["Timestamp"] | null;
             completed_session_id: components["schemas"]["Id"] | null;
@@ -670,6 +725,8 @@ export interface components {
         CreateSessionRequest: {
             training_id: components["schemas"]["Id"];
             assignment_id?: components["schemas"]["Id"] | null;
+            /** @description Atama varsa atamanın kanalı kullanılır. */
+            channel?: components["schemas"]["PracticeChannel"];
             /** Format: uuid */
             client_request_id: string;
             /**
@@ -739,6 +796,7 @@ export interface components {
             practice: components["schemas"]["PracticeInfo"] | null;
             customer_stance: components["schemas"]["CustomerStance"];
             assignment_id: components["schemas"]["Id"] | null;
+            channel: components["schemas"]["PracticeChannel"];
             status: components["schemas"]["SessionStatus"];
             /** @description Oturum bitmeden null. */
             evaluation_status: components["schemas"]["EvaluationStatus"] | null;
@@ -1029,6 +1087,7 @@ export interface components {
         CreateAssignmentsRequest: {
             training_id: components["schemas"]["Id"];
             employee_ids: components["schemas"]["Id"][];
+            channel?: components["schemas"]["PracticeChannel"];
             due_at?: components["schemas"]["Timestamp"] | null;
         };
         CreateAssignmentsResponse: {
@@ -1301,6 +1360,45 @@ export interface operations {
             429: components["responses"]["RateLimited"];
         };
     };
+    changePassword: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Requested-With": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Şifre yenilendi, yenilenmiş oturum cookie'si set edilir */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Me"];
+                };
+            };
+            /** @description Mevcut şifre hatalı */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationError"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
     logout: {
         parameters: {
             query?: never;
@@ -1412,6 +1510,32 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AssignmentPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    listMySessions: {
+        parameters: {
+            query?: {
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+                bucket?: "open" | "done" | "abandoned" | "all";
+                channel?: components["schemas"]["PracticeChannel"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Oturum listesi */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionSummaryPage"];
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -1633,6 +1757,34 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FinishAccepted"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    abandonSession: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Requested-With": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                sessionId: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Prova puanlanmadan kapandı */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AbandonAccepted"];
                 };
             };
             401: components["responses"]["Unauthorized"];

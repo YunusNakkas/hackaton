@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { lazy, Suspense } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { api, isApiError } from "./api/client";
 import type { Me } from "./api/types";
 import { Shell } from "./components/Shell";
@@ -9,6 +9,7 @@ import { HomePage } from "./pages/HomePage";
 import { LoginPage } from "./pages/LoginPage";
 import { SessionPage } from "./pages/SessionPage";
 import { TrainingPage } from "./pages/TrainingPage";
+import { ChangePasswordPage } from "./pages/ChangePasswordPage";
 
 const AdminPage = lazy(() => import("./pages/AdminPage").then(module => ({ default: module.AdminPage })));
 
@@ -30,9 +31,12 @@ function Splash() {
 }
 
 function Gate() {
+  const location = useLocation();
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<Me>("/me"), retry: false });
   if (me.isLoading) return <Splash />;
   if (!me.data) return <Navigate to="/login" replace />;
+  if (me.data.user.must_change_password && location.pathname !== "/change-password") return <Navigate to="/change-password" replace />;
+  if (location.pathname === "/change-password") return <Outlet />;
   return <Shell />;
 }
 
@@ -46,7 +50,7 @@ function ManagerRoute() {
 function Guest() {
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<Me>("/me"), retry: false });
   if (me.isLoading) return <Splash />;
-  if (me.data) return <Navigate to={me.data.user.role === "manager" ? "/admin" : "/"} replace />;
+  if (me.data) return <Navigate to={me.data.user.must_change_password ? "/change-password" : me.data.user.role === "manager" ? "/admin" : "/"} replace />;
   return <LoginPage />;
 }
 
@@ -58,6 +62,7 @@ export function App() {
           <Routes>
             <Route path="/login" element={<Guest />} />
             <Route element={<Gate />}>
+              <Route path="/change-password" element={<ChangePasswordPage />} />
               <Route path="/" element={<HomePage />} />
               <Route path="/admin" element={<ManagerRoute />} />
               <Route path="/admin/overview" element={<ManagerRoute />} />

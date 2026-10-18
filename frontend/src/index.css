@@ -3,6 +3,7 @@
 :root {
   /* Açık Tema: Çok Açık Mavi */
   --pm-paper: #f0f7ff;
+  --pm-call: #0c1e3a;
   --pm-card: #ffffff;
   --pm-card-subtle: #e6f2fd;
   --pm-ink: #0c1e3a;
@@ -22,6 +23,7 @@
 .dark {
   /* Karanlık Tema: Lacivert */
   --pm-paper: #080f24;
+  --pm-call: #0f1c3d;
   --pm-card: #0f1c3d;
   --pm-card-subtle: #16274e;
   --pm-ink: #f0f5ff;
@@ -59,6 +61,7 @@
 [data-theme="quartz"] {
   /* Sıcak kuvars ve turuncu */
   --pm-paper: #f5f1ed;
+  --pm-call: #302720;
   --pm-card: #fffcf9;
   --pm-card-subtle: #ede5dd;
   --pm-ink: #302720;
@@ -77,6 +80,7 @@
 [data-theme="charcoal"] {
   /* Çok koyu gri ve turuncu */
   --pm-paper: #141414;
+  --pm-call: #202020;
   --pm-card: #202020;
   --pm-card-subtle: #2c2c2c;
   --pm-ink: #faf5ef;
@@ -145,3 +149,4 @@ button:disabled { cursor: not-allowed; }
 
 [data-theme="dark"] .bg-primary.text-white, [data-theme="dark"] .from-primary.text-white, [data-theme="dark"] .bg-pine.text-white, [data-theme="dark"] .bg-warn.text-white { color: #080f24; }
 [data-theme="charcoal"] .bg-primary.text-white, [data-theme="charcoal"] .from-primary.text-white, [data-theme="charcoal"] .bg-pine.text-white, [data-theme="charcoal"] .bg-warn.text-white { color: #141414; }
+[data-theme="dark"] .hover\:bg-primary:hover, [data-theme="charcoal"] .hover\:bg-primary:hover { color: var(--pm-paper); }

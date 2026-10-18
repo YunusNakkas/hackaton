@@ -25,6 +25,7 @@ export interface Me {
     display_name: string;
     role: Role;
     active: boolean;
+    must_change_password: boolean;
   };
   organization: { id: string; name: string };
 }

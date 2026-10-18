@@ -66,4 +66,5 @@ def test_migrations_upgrade_populated_database(tmp_path):
     assert c.execute("select count(*) from turns where session_id='S1'").fetchone()[0] == 1
     assert c.execute("select practice_mode from practice_sessions where id='S1'").fetchone() == (None,)
     assert c.execute("select customer_stance from practice_sessions where id='S1'").fetchone() == ("normal",)
+    assert c.execute("select must_change_password from users where id='U1'").fetchone() == (1,)
     assert not c.execute("select name from sqlite_master where name like '_alembic%'").fetchall()

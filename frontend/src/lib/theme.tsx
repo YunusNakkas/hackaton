@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useLayoutEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useLayoutEffect, useState } from "react";
 
 export type Theme = "light" | "dark" | "quartz" | "charcoal";
 
@@ -20,16 +20,29 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(() => {
-    const saved = localStorage.getItem("pm_theme") as Theme | null;
+function readTheme(): Theme {
+  try {
+    const saved = localStorage.getItem("pm_theme");
     if (themes.some(option => option.id === saved)) return saved as Theme;
-    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-  });
+  } catch { /* Depolama kapalıysa tema bellekte çalışmaya devam eder. */ }
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const [theme, setThemeState] = useState<Theme>(readTheme);
+
+  useEffect(() => {
+    function sync(event: StorageEvent) {
+      if (event.key === "pm_theme" || event.key === null) setThemeState(readTheme());
+    }
+    window.addEventListener("storage", sync);
+    return () => window.removeEventListener("storage", sync);
+  }, []);
 
   useLayoutEffect(() => {
     const root = document.documentElement;
     root.setAttribute("data-theme", theme);
+    root.style.colorScheme = theme === "dark" || theme === "charcoal" ? "dark" : "light";
     document.querySelector('link[rel="icon"]')?.setAttribute("href", themeLogo(theme));
     document.querySelector('link[rel="apple-touch-icon"]')?.setAttribute("href", themeLogo(theme));
     if (theme === "dark" || theme === "charcoal") {
@@ -37,7 +50,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     } else {
       root.classList.remove("dark");
     }
-    localStorage.setItem("pm_theme", theme);
+    try { localStorage.setItem("pm_theme", theme); } catch { /* Tercihi saklayamamak sayfayı engellemez. */ }
   }, [theme]);
 
   const setTheme = (t: Theme) => {

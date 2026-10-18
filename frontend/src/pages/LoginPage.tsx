@@ -30,8 +30,11 @@ export function LoginPage() {
     setFormError(null);
     try {
       const me = await api<Me>("/auth/login", { method: "POST", body: JSON.stringify(values) });
+      queryClient.clear();
       queryClient.setQueryData(["me"], me);
-      if (me.user.role === "manager") {
+      if (me.user.must_change_password) {
+        navigate("/change-password", { replace: true });
+      } else if (me.user.role === "manager") {
         navigate("/admin", { replace: true });
       } else {
         navigate("/", { replace: true });
@@ -98,6 +101,7 @@ export function LoginPage() {
 
           <h2 className="font-serif text-3xl font-semibold text-ink">Giriş Yap</h2>
           <p className="mt-1 text-sm text-muted">Platforma erişmek için bilgilerinizi girin.</p>
+          <p className="mt-2 text-sm text-muted">İlk girişte yöneticinizin verdiği geçici şifreyi kullanın; ardından kendi şifrenizi belirleyin.</p>
 
           <form onSubmit={handleSubmit(onSubmit)} className="mt-8 space-y-4" noValidate>
             <div>

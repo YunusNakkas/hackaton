@@ -102,7 +102,7 @@ export function PhoneCall({
 
   return (
     <section
-      className="mt-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[2rem] bg-[#0c1e3a] text-[#f0f7ff]"
+      className="mt-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[2rem] bg-[var(--pm-call)] text-[#f0f7ff]"
       onClick={() => {
         if (ended || !blocked || !audio.current) return;
         void audio.current.play().then(

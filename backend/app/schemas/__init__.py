@@ -23,7 +23,8 @@ def me(user: User, org: Organization) -> dict[str, Any]:
 
 
 def user_json(u: User) -> dict[str, Any]:
-    return {"id": u.id, "email": u.email, "display_name": u.display_name, "role": u.role, "active": u.active}
+    return {"id": u.id, "email": u.email, "display_name": u.display_name, "role": u.role,
+            "active": u.active, "must_change_password": u.must_change_password}
 
 
 def training_summary(t: Training) -> dict[str, Any]:
