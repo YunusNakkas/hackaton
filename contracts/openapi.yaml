@@ -156,10 +156,21 @@ paths:
     get:
       tags: [employee]
       operationId: listMySessions
-      description: Giriş yapan çalışanın kendi prova oturumları, yeniden eskiye. Başkasının oturumu dönmez.
+      description: |
+        Giriş yapan çalışanın kendi prova oturumları, yeniden eskiye. Başkasının oturumu dönmez.
+        `bucket` ile süren, raporlu veya bırakılmış oturumlar ayrılır; `channel` mesaj/telefon ayırır.
       parameters:
         - $ref: "#/components/parameters/Cursor"
         - $ref: "#/components/parameters/Limit"
+        - name: bucket
+          in: query
+          schema:
+            type: string
+            enum: [open, done, abandoned, all]
+            default: all
+        - name: channel
+          in: query
+          schema: { $ref: "#/components/schemas/PracticeChannel" }
       responses:
         "200":
           description: Oturum listesi
@@ -214,6 +225,22 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [sessions]
+      operationId: deleteSession
+      description: |
+        Bırakılmış (puan üretilmeden kapanmış) provayı siler. Raporu olan veya hâlâ
+        süren oturum 409 döner. İdempotent değildir: yoksa 404.
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "204":
+          description: Silindi
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
 
   /sessions/{sessionId}/turns:
     post:

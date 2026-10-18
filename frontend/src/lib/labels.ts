@@ -69,9 +69,15 @@ export function channelLabel(channel: PracticeChannel) {
   return channel === "phone" ? "Telefon" : "Mesaj";
 }
 
+export type HistoryBucket = "open" | "done" | "abandoned" | "all";
+
+export function isAbandoned(item: Pick<SessionSummary, "status" | "evaluation_status">) {
+  return item.status === "finished" && item.evaluation_status == null;
+}
+
 export function summaryOutcome(item: Pick<SessionSummary, "model_runtime" | "status" | "evaluation_status" | "total">) {
   if (item.model_runtime === "stub") return "Sahte puan";
-  if (item.status === "finished" && item.evaluation_status == null) return "Bırakıldı";
+  if (isAbandoned(item)) return "Bırakıldı";
   if (item.total?.complete && item.total.score != null) return `${item.total.score} / ${item.total.max_score}`;
   if (item.status === "finished") return "Puan yok";
   return "Sürüyor";

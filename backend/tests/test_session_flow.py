@@ -93,6 +93,16 @@ def test_empty_session_can_be_abandoned(elif_client):
                       if item["id"] == created["session"]["assignment_id"])
     assert assignment["status"] == "assigned"
 
+    open_ids = {item["id"] for item in elif_client.get("/api/v1/sessions", params={"bucket": "open"}).json()["items"]}
+    left_ids = {item["id"] for item in elif_client.get("/api/v1/sessions", params={"bucket": "abandoned"}).json()["items"]}
+    assert sid not in open_ids and sid in left_ids
+
+    gone = elif_client.delete(f"/api/v1/sessions/{sid}", headers=CSRF)
+    assert gone.status_code == 204
+    assert elif_client.get(f"/api/v1/sessions/{sid}").status_code == 404
+    assert sid not in {item["id"] for item in
+                       elif_client.get("/api/v1/sessions", params={"bucket": "abandoned"}).json()["items"]}
+
 
 def test_abandon_rejects_a_session_that_has_a_reply(elif_client):
     created = _start(elif_client)
@@ -105,6 +115,7 @@ def test_abandon_rejects_a_session_that_has_a_reply(elif_client):
     res = elif_client.post(f"/api/v1/sessions/{sid}/abandon", headers=CSRF)
     assert res.status_code == 409
     assert res.json()["error"]["code"] == "conflict"
+    assert elif_client.delete(f"/api/v1/sessions/{sid}", headers=CSRF).status_code == 409
 
 
 def test_text_message_skips_asr_and_gets_a_reply(elif_client):

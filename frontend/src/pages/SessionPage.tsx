@@ -247,6 +247,17 @@ export function SessionPage() {
     }
   }
 
+  async function removeAbandoned() {
+    setNotice(null);
+    try {
+      await api(`/sessions/${sessionId}`, { method: "DELETE" });
+      await queryClient.invalidateQueries({ queryKey: ["my-sessions"] });
+      navigate("/");
+    } catch (error) {
+      setNotice(isApiError(error) ? error.message : "Prova silinemedi.");
+    }
+  }
+
   async function retryEvaluation() {
     const id = evaluation.data?.evaluation_job_id;
     if (!id) return;
@@ -325,9 +336,19 @@ export function SessionPage() {
       </div>
 
       {finished && !session.evaluation_status && (
-        <p className="mt-8 rounded-2xl border border-line bg-card px-5 py-4 text-sm text-muted">
-          Bu prova cevap verilmeden bırakıldı. Puan üretilmedi.
-        </p>
+        <div className="mt-8 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-card px-5 py-4">
+          <p className="text-sm text-muted">Bu prova cevap verilmeden bırakıldı. Puan üretilmedi.</p>
+          {isOwner && (
+            <button
+              type="button"
+              disabled={sending}
+              onClick={() => void removeAbandoned()}
+              className="rounded-full border border-line px-3 py-1 text-xs text-muted hover:text-ink disabled:opacity-40"
+            >
+              Listeden sil
+            </button>
+          )}
+        </div>
       )}
 
       {finished && session.evaluation_status && (

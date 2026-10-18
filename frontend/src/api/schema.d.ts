@@ -149,7 +149,11 @@ export interface paths {
         get: operations["getSession"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * @description Bırakılmış (puan üretilmeden kapanmış) provayı siler. Raporu olan veya hâlâ
+         *     süren oturum 409 döner. İdempotent değildir: yoksa 404.
+         */
+        delete: operations["deleteSession"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1467,6 +1471,32 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    deleteSession: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Requested-With": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                sessionId: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Silindi */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     submitTurn: {

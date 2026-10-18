@@ -1,3 +1,4 @@
+import shutil
 import uuid
 from pathlib import Path
 from typing import Literal
@@ -5,7 +6,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -91,8 +92,20 @@ def _check_practice(db: Session, user: User, t: Training, p: PracticeRequest) ->
 
 @router.get("/sessions")
 def list_my_sessions(cursor: str | None = None, limit: int = Query(20, ge=1, le=100),
+                     bucket: Literal["open", "done", "abandoned", "all"] = "all",
+                     channel: Literal["message", "phone"] | None = None,
                      user: User = Depends(current_user), db: Session = Depends(get_db)):
     stmt = select(PracticeSession).where(PracticeSession.employee_id == user.id)
+    if channel:
+        stmt = stmt.where(PracticeSession.channel == channel)
+    if bucket == "open":
+        stmt = stmt.where(PracticeSession.status == "active")
+    elif bucket == "done":
+        stmt = stmt.where(PracticeSession.status == "finished",
+                          exists().where(Evaluation.session_id == PracticeSession.id))
+    elif bucket == "abandoned":
+        stmt = stmt.where(PracticeSession.status == "finished",
+                          ~exists().where(Evaluation.session_id == PracticeSession.id))
     rows, nxt = schemas.paginate(db, stmt, PracticeSession.id, cursor, limit, desc=True)
     return {"items": [schemas.session_summary(db, row[0]) for row in rows], "next_cursor": nxt}
 
@@ -320,6 +333,30 @@ def abandon_session(session_id: str, user: User = Depends(current_user), db: Ses
             assignment.status = "assigned"
     db.commit()
     return {"session_id": s.id}
+
+
+@router.delete("/sessions/{session_id}", status_code=204)
+def delete_session(session_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Yalnız bırakılmış (puansız kapanmış) provayı listeden siler. Raporlu oturum silinmez."""
+    s = _own_session(db, user, session_id)
+    if s.status != "finished" or db.get(Evaluation, s.id) is not None:
+        raise conflict("conflict", "Yalnız bırakılmış, puanı olmayan prova silinebilir.")
+
+    media_root = get_settings().media_dir.resolve()
+    folder = (media_root / "sessions" / s.id).resolve()
+    if folder.is_relative_to(media_root) and folder.is_dir():
+        shutil.rmtree(folder, ignore_errors=True)
+
+    db.query(PracticeSession).filter_by(practice_of_session_id=s.id).update({
+        "practice_of_session_id": None, "practice_mode": None, "practice_focus": None,
+    })
+    db.query(Job).filter_by(session_id=s.id).update({"turn_id": None})
+    db.flush()
+    db.query(Turn).filter_by(session_id=s.id).delete()
+    db.query(Job).filter_by(session_id=s.id).delete()
+    db.delete(s)
+    db.commit()
+    return Response(status_code=204)
 
 
 @router.get("/sessions/{session_id}/evaluation")

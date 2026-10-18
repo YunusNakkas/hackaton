@@ -2,13 +2,15 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api, allPages, isApiError } from "../api/client";
-import type { AdminOverview, Assignment, AssignmentStatus, Me, SessionSummary, TrainingSummary } from "../api/types";
-import { assignmentLabel, channelLabel, difficultyLabel, formatDue, sectorLabel, summaryOutcome } from "../lib/labels";
+import type { AdminOverview, Assignment, AssignmentStatus, Me, PracticeChannel, SessionSummary, TrainingSummary } from "../api/types";
+import { assignmentLabel, channelLabel, difficultyLabel, formatDue, isAbandoned, sectorLabel, summaryOutcome, type HistoryBucket } from "../lib/labels";
 
 export function HomePage() {
   const queryClient = useQueryClient();
-  const [dropping, setDropping] = useState<string | null>(null);
-  const [dropError, setDropError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyBucket, setHistoryBucket] = useState<HistoryBucket>("open");
+  const [historyChannel, setHistoryChannel] = useState<"" | PracticeChannel>("");
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<Me>("/me") });
   const isManager = me.data?.user.role === "manager";
   const [sector, setSector] = useState("");
@@ -33,8 +35,12 @@ export function HomePage() {
   });
 
   const history = useQuery({
-    queryKey: ["my-sessions"],
-    queryFn: () => api<{ items: SessionSummary[] }>("/sessions?limit=20"),
+    queryKey: ["my-sessions", historyBucket, historyChannel],
+    queryFn: () => {
+      const params = new URLSearchParams({ limit: "20", bucket: historyBucket });
+      if (historyChannel) params.set("channel", historyChannel);
+      return api<{ items: SessionSummary[] }>(`/sessions?${params}`);
+    },
   });
 
   const adminOverview = useQuery({
@@ -43,17 +49,34 @@ export function HomePage() {
     queryFn: () => api<AdminOverview>("/admin/overview"),
   });
 
+  async function refreshHistory() {
+    await queryClient.invalidateQueries({ queryKey: ["my-sessions"] });
+    await queryClient.invalidateQueries({ queryKey: ["assignments"] });
+  }
+
   async function dropSession(id: string) {
-    setDropping(id);
-    setDropError(null);
+    setBusyId(id);
+    setHistoryError(null);
     try {
       await api(`/sessions/${id}/abandon`, { method: "POST" });
-      await queryClient.invalidateQueries({ queryKey: ["my-sessions"] });
-      await queryClient.invalidateQueries({ queryKey: ["assignments"] });
+      await refreshHistory();
     } catch (error) {
-      setDropError(isApiError(error) ? error.message : "Prova bırakılamadı.");
+      setHistoryError(isApiError(error) ? error.message : "Prova bırakılamadı.");
     } finally {
-      setDropping(null);
+      setBusyId(null);
+    }
+  }
+
+  async function removeSession(id: string) {
+    setBusyId(id);
+    setHistoryError(null);
+    try {
+      await api(`/sessions/${id}`, { method: "DELETE" });
+      await refreshHistory();
+    } catch (error) {
+      setHistoryError(isApiError(error) ? error.message : "Prova silinemedi.");
+    } finally {
+      setBusyId(null);
     }
   }
 
@@ -224,36 +247,98 @@ export function HomePage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted">Geçmiş provalar</h2>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted">Geçmiş provalar</h2>
+          {history.data && (
+            <span className="text-xs text-muted">{history.data.items.length} kayıt</span>
+          )}
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {([
+            ["open", "Süren"],
+            ["done", "Raporlar"],
+            ["abandoned", "Bırakılan"],
+            ["all", "Tümü"],
+          ] as const).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setHistoryBucket(id)}
+              className={`rounded-full px-3 py-1 text-xs font-medium ${
+                historyBucket === id ? "bg-ink text-paper" : "border border-line text-muted hover:text-ink"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+          <span className="mx-1 hidden h-6 w-px bg-line sm:block" />
+          {([
+            ["", "Kanal"],
+            ["message", "Mesaj"],
+            ["phone", "Telefon"],
+          ] as const).map(([id, label]) => (
+            <button
+              key={id || "channel-all"}
+              type="button"
+              onClick={() => setHistoryChannel(id)}
+              className={`rounded-full px-3 py-1 text-xs font-medium ${
+                historyChannel === id ? "bg-primary/10 text-primary" : "border border-line text-muted hover:text-ink"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
         {history.isLoading && <p className="text-sm text-muted">Yükleniyor…</p>}
         {history.data && history.data.items.length === 0 && (
-          <p className="text-sm text-muted">Henüz prova yok.</p>
+          <p className="rounded-2xl border border-line bg-card p-5 text-sm text-muted">
+            {historyBucket === "open"
+              ? "Süren prova yok."
+              : historyBucket === "done"
+                ? "Henüz rapor yok."
+                : historyBucket === "abandoned"
+                  ? "Bırakılmış prova yok."
+                  : "Henüz prova yok."}
+          </p>
         )}
-        {dropError && <p className="text-sm text-accent">{dropError}</p>}
-        <div className="grid gap-3">
+        {historyError && <p className="text-sm text-accent">{historyError}</p>}
+        <div className="grid gap-2">
           {history.data?.items.map((item) => {
             const canDrop = item.status === "active" && item.employee_turn_count === 0;
+            const canRemove = isAbandoned(item);
             return (
               <div
                 key={item.id}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-line bg-card px-5 py-4"
+                className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-card px-4 py-3"
               >
                 <Link to={`/sessions/${item.id}`} className="min-w-0 flex-1 hover:text-primary">
                   <p className="text-xs text-muted">
                     {sectorLabel(item.training.sector)} · {channelLabel(item.channel)} · {new Date(item.started_at).toLocaleString("tr-TR")}
                   </p>
-                  <p className="mt-0.5 text-lg">{item.training.title}</p>
+                  <p className="mt-0.5 text-base font-medium">{item.training.title}</p>
                 </Link>
-                <div className="flex items-center gap-3">
-                  <span className="text-sm font-semibold text-primary">{summaryOutcome(item)}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-primary">{summaryOutcome(item)}</span>
                   {canDrop && (
                     <button
                       type="button"
-                      disabled={dropping === item.id}
+                      disabled={busyId === item.id}
                       onClick={() => void dropSession(item.id)}
                       className="rounded-full border border-line px-3 py-1 text-xs text-muted hover:text-ink disabled:opacity-40"
                     >
-                      {dropping === item.id ? "Bırakılıyor" : "Bırak"}
+                      {busyId === item.id ? "Bırakılıyor" : "Bırak"}
+                    </button>
+                  )}
+                  {canRemove && (
+                    <button
+                      type="button"
+                      disabled={busyId === item.id}
+                      onClick={() => void removeSession(item.id)}
+                      className="rounded-full border border-line px-3 py-1 text-xs text-muted hover:text-ink disabled:opacity-40"
+                    >
+                      {busyId === item.id ? "Siliniyor" : "Sil"}
                     </button>
                   )}
                 </div>
