@@ -62,6 +62,10 @@ def current_user(request: Request, db: Session = Depends(get_db)) -> User:
     user = db.get(User, row.user_id)
     if user is None or not user.active:
         raise unauthorized()
+    if user.must_change_password and request.url.path not in {
+        "/api/v1/me", "/api/v1/auth/change-password", "/api/v1/auth/logout",
+    }:
+        raise ApiError(403, "password_change_required", "Devam etmek için geçici şifrenizi yenileyin.")
     return user
 
 

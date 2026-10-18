@@ -47,7 +47,7 @@ def load_trainings(org_id: str) -> list[Training]:
     return out
 
 
-def seed(db: Session, password: str) -> Organization:
+def seed(db: Session, password: str, *, require_password_change: bool = False) -> Organization:
     org = db.query(Organization).filter_by(name=ORG_NAME).one_or_none()
     if org is None:
         # Önceki sürümün başlangıç verisini tekrar oluşturmaya çalışmayın.
@@ -58,7 +58,8 @@ def seed(db: Session, password: str) -> Organization:
     db.add(org)
     db.flush()
     pw = hash_password(password)
-    users = {email: User(org_id=org.id, email=email, display_name=name, role=role, password_hash=pw)
+    users = {email: User(org_id=org.id, email=email, display_name=name, role=role, password_hash=pw,
+                         must_change_password=require_password_change and role == "employee")
              for email, name, role in USERS}
     db.add_all(users.values())
     trainings = load_trainings(org.id)
@@ -79,7 +80,7 @@ def main() -> None:
             raise SystemExit("prod ortamında PM_DEMO_PASSWORD zorunlu")
         password = "prova1234"
     with get_sessionmaker()() as db:
-        org = seed(db, password)
+        org = seed(db, password, require_password_change=True)
         n = db.query(Training).filter_by(org_id=org.id).count()
     print(f"seed tamam: {org.name}, {n} eğitim, kullanıcılar: {', '.join(u[0] for u in USERS)}")
 

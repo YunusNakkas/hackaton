@@ -76,6 +76,34 @@ paths:
         "422": { $ref: "#/components/responses/ValidationError" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
+  /auth/change-password:
+    post:
+      tags: [auth]
+      operationId: changePassword
+      description: Geçici veya mevcut şifreyi doğrular, yeni şifre belirler. Diğer oturumlar iptal edilir, mevcut cookie yenilenir. Geçici şifreli kullanıcılar bu işlem tamamlanmadan eğitim uçlarını kullanamaz.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ChangePasswordRequest" }
+      responses:
+        "200":
+          description: Şifre yenilendi, yenilenmiş oturum cookie'si set edilir
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Me" }
+        "400":
+          description: Mevcut şifre hatalı
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
   /auth/logout:
     post:
       tags: [auth]
@@ -932,6 +960,9 @@ components:
     ErrorCode:
       type: string
       enum:
+        - password_change_required
+        - invalid_current_password
+        - password_changed
         - unauthorized
         - invalid_credentials
         - forbidden
@@ -987,15 +1018,24 @@ components:
       properties:
         email: { type: string, format: email, maxLength: 254 }
         password: { type: string, minLength: 1, maxLength: 200 }
+    ChangePasswordRequest:
+      type: object
+      required: [current_password, new_password, confirm_password]
+      additionalProperties: false
+      properties:
+        current_password: { type: string, minLength: 1, maxLength: 200 }
+        new_password: { type: string, minLength: 8, maxLength: 200 }
+        confirm_password: { type: string, minLength: 8, maxLength: 200 }
     User:
       type: object
-      required: [id, email, display_name, role, active]
+      required: [id, email, display_name, role, active, must_change_password]
       properties:
         id: { $ref: "#/components/schemas/Id" }
         email: { type: string, format: email }
         display_name: { type: string }
         role: { $ref: "#/components/schemas/Role" }
         active: { type: boolean }
+        must_change_password: { type: boolean, description: "Geçici şifre yenilenmeden eğitime devam edilemez." }
     Organization:
       type: object
       required: [id, name]

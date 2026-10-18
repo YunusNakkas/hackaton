@@ -113,7 +113,7 @@ export function CreateEmployeeModal({ open, onClose }: CreateEmployeeModalProps)
               onChange={(e) => setTempPassword(e.target.value)}
               className="w-full rounded-2xl border border-line bg-card-subtle px-4 py-2.5 text-sm text-ink outline-none focus:border-primary transition-colors"
             />
-            <p className="mt-1 text-xs text-muted">Çalışan ilk girişte bu şifreyi kullanabilir.</p>
+            <p className="mt-1 text-xs text-muted">Çalışan ilk girişte bu şifreyle giriş yapıp kendi şifresini belirlemek zorundadır.</p>
           </div>
 
           <div className="pt-4 flex items-center justify-end gap-3 border-t border-line">

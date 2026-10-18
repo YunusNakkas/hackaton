@@ -89,7 +89,7 @@ def create_employee(body: CreateEmployeeRequest, me: User = Depends(require_mana
     if db.query(User.id).filter(func.lower(User.email) == email).first():
         raise conflict("email_taken", "Bu e-posta adresiyle bir kullanıcı zaten var.")
     u = User(org_id=me.org_id, email=email, display_name=body.display_name.strip(), role="employee",
-             password_hash=hash_password(body.temporary_password))
+             password_hash=hash_password(body.temporary_password), must_change_password=True)
     db.add(u)
     db.commit()
     return schemas.employee_json(db, u)

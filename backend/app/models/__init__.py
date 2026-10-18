@@ -32,6 +32,7 @@ class User(Base):
     display_name: Mapped[str] = mapped_column(String(100))
     role: Mapped[str] = mapped_column(String(16))  # employee | manager
     password_hash: Mapped[str] = mapped_column(String(255))
+    must_change_password: Mapped[bool] = mapped_column(default=False, server_default="0")
     active: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = _created()
 
