@@ -252,7 +252,7 @@ export function AssignModal({
                         </div>
                       </div>
                       <span className="text-xs text-muted">
-                        {emp.open_assignments} açık atama
+                        {emp.open_assignments} açık atama{emp.active_sessions > 0 ? ` · ${emp.active_sessions} süren prova` : ""}
                       </span>
                     </label>
                   );

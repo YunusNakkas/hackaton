@@ -123,6 +123,10 @@ export interface FinishAccepted {
   evaluation_job_id: string;
 }
 
+export interface AbandonAccepted {
+  session_id: string;
+}
+
 export interface JobError {
   code: string;
   message: string;
@@ -206,6 +210,7 @@ export interface AdminOverview {
   completed_assignments: number;
   sessions_pending_review: number;
   sessions_last_7_days: number;
+  active_sessions: number;
 }
 
 export interface Employee {
@@ -215,6 +220,7 @@ export interface Employee {
   active: boolean;
   created_at: string;
   open_assignments: number;
+  active_sessions: number;
   completed_sessions: number;
   last_session_at: string | null;
 }
@@ -231,8 +237,11 @@ export interface SessionSummary {
   status: SessionStatus;
   evaluation_status: EvaluationStatus | null;
   review_status: ReviewStatus;
+  channel: PracticeChannel;
   total: TotalScore | null;
   employee_turn_count: number;
+  practice_mode: "same" | "adaptive" | null;
+  model_runtime: string | null;
   started_at: string;
   finished_at: string | null;
 }

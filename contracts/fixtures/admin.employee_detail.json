@@ -5,6 +5,7 @@
   "active": true,
   "created_at": "2026-10-17T20:43:38.736311Z",
   "open_assignments": 0,
+  "active_sessions": 0,
   "completed_sessions": 1,
   "last_session_at": "2026-10-17T20:43:38.806242Z",
   "assignments": [
@@ -56,6 +57,8 @@
         "total_dimensions": 4
       },
       "employee_turn_count": 1,
+      "channel": "message",
+      "model_runtime": null,
       "started_at": "2026-10-17T20:43:38.806242Z",
       "finished_at": "2026-10-17T20:43:38.851462Z",
       "practice_mode": null

@@ -1,21 +1,35 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { api, allPages } from "../api/client";
-import type { AdminOverview, Assignment, Me, SessionSummary, TrainingSummary } from "../api/types";
-import { assignmentLabel, difficultyLabel, formatDue, sectorLabel } from "../lib/labels";
+import { api, allPages, isApiError } from "../api/client";
+import type { AdminOverview, Assignment, AssignmentStatus, Me, SessionSummary, TrainingSummary } from "../api/types";
+import { assignmentLabel, channelLabel, difficultyLabel, formatDue, sectorLabel, summaryOutcome } from "../lib/labels";
 
 export function HomePage() {
+  const queryClient = useQueryClient();
+  const [dropping, setDropping] = useState<string | null>(null);
+  const [dropError, setDropError] = useState<string | null>(null);
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<Me>("/me") });
   const isManager = me.data?.user.role === "manager";
+  const [sector, setSector] = useState("");
+  const [assignmentStatus, setAssignmentStatus] = useState<AssignmentStatus | "">("");
 
-  const trainings = useQuery({
+  const catalog = useQuery({
     queryKey: ["trainings"],
     queryFn: () => allPages<TrainingSummary>("/trainings?limit=100"),
   });
+  const filteredTrainings = useQuery({
+    queryKey: ["trainings", { sector }],
+    queryFn: () => allPages<TrainingSummary>(`/trainings?limit=100&sector=${encodeURIComponent(sector)}`),
+    enabled: Boolean(sector),
+  });
+  const trainings = sector ? filteredTrainings : catalog;
+  const sectors = [...new Set(catalog.data?.items.map(training => training.sector) ?? [])]
+    .sort((a, b) => sectorLabel(a).localeCompare(sectorLabel(b), "tr"));
 
   const assignments = useQuery({
-    queryKey: ["assignments"],
-    queryFn: () => allPages<Assignment>("/assignments?limit=100"),
+    queryKey: ["assignments", { status: assignmentStatus }],
+    queryFn: () => allPages<Assignment>(`/assignments?limit=100${assignmentStatus ? `&status=${assignmentStatus}` : ""}`),
   });
 
   const history = useQuery({
@@ -28,6 +42,20 @@ export function HomePage() {
     enabled: isManager,
     queryFn: () => api<AdminOverview>("/admin/overview"),
   });
+
+  async function dropSession(id: string) {
+    setDropping(id);
+    setDropError(null);
+    try {
+      await api(`/sessions/${id}/abandon`, { method: "POST" });
+      await queryClient.invalidateQueries({ queryKey: ["my-sessions"] });
+      await queryClient.invalidateQueries({ queryKey: ["assignments"] });
+    } catch (error) {
+      setDropError(isApiError(error) ? error.message : "Prova bırakılamadı.");
+    } finally {
+      setDropping(null);
+    }
+  }
 
   const first = me.data?.user.display_name.split(" ")[0];
 
@@ -79,6 +107,12 @@ export function HomePage() {
                   <span className="text-xs text-muted">Açık Atama</span>
                 </div>
                 <div className="border-l border-line pl-4">
+                  <span className="font-serif text-2xl font-bold text-ink mr-1.5">
+                    {adminOverview.data.active_sessions}
+                  </span>
+                  <span className="text-xs text-muted">Süren prova</span>
+                </div>
+                <div className="border-l border-line pl-4">
                   <span className="font-serif text-2xl font-bold text-warn mr-1.5">
                     {adminOverview.data.sessions_pending_review}
                   </span>
@@ -112,10 +146,19 @@ export function HomePage() {
           )}
         </div>
 
+        <label className="flex flex-wrap items-center gap-3 text-sm text-muted">Atama durumu
+          <select aria-label="Atama durumu" className="rounded-xl border border-line bg-card px-3 py-2 text-ink" value={assignmentStatus} onChange={event => setAssignmentStatus(event.target.value as AssignmentStatus | "")}>
+            <option value="">Tümü</option>
+            <option value="assigned">Atandı</option>
+            <option value="in_progress">Devam ediyor</option>
+            <option value="completed">Tamamlandı</option>
+          </select>
+        </label>
         {assignments.isLoading && <p className="text-sm text-muted">Atamalar yükleniyor…</p>}
+        {assignments.isError && <p role="alert" className="text-sm text-accent">Atamalar alınamadı. <button type="button" className="underline" onClick={() => void assignments.refetch()}>Tekrar dene</button></p>}
         {assignments.data && assignments.data.items.length === 0 && (
           <div className="rounded-2xl border border-line bg-card p-5 text-sm text-muted">
-            Açık bir zorunlu atamanız bulunmuyor. Aşağıdaki katalogdan serbest prova başlatabilirsiniz.
+            {assignmentStatus ? "Seçtiğiniz durumda atama bulunamadı. Diğer atamaları görmek için Tümü seçeneğini kullanabilirsiniz." : "Size atanmış eğitim bulunmuyor. Aşağıdaki katalogdan serbest prova başlatabilirsiniz."}
           </div>
         )}
 
@@ -186,28 +229,35 @@ export function HomePage() {
         {history.data && history.data.items.length === 0 && (
           <p className="text-sm text-muted">Henüz prova yok.</p>
         )}
+        {dropError && <p className="text-sm text-accent">{dropError}</p>}
         <div className="grid gap-3">
           {history.data?.items.map((item) => {
-            const score =
-              item.total?.complete && item.total.score != null
-                ? `${item.total.score} / ${item.total.max_score}`
-                : item.status === "finished"
-                  ? "Puan yok"
-                  : "Sürüyor";
+            const canDrop = item.status === "active" && item.employee_turn_count === 0;
             return (
-              <Link
+              <div
                 key={item.id}
-                to={`/sessions/${item.id}`}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-line bg-card px-5 py-4 hover:border-primary/40"
+                className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-line bg-card px-5 py-4"
               >
-                <div>
+                <Link to={`/sessions/${item.id}`} className="min-w-0 flex-1 hover:text-primary">
                   <p className="text-xs text-muted">
-                    {sectorLabel(item.training.sector)} · {new Date(item.started_at).toLocaleString("tr-TR")}
+                    {sectorLabel(item.training.sector)} · {channelLabel(item.channel)} · {new Date(item.started_at).toLocaleString("tr-TR")}
                   </p>
                   <p className="mt-0.5 text-lg">{item.training.title}</p>
+                </Link>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-semibold text-primary">{summaryOutcome(item)}</span>
+                  {canDrop && (
+                    <button
+                      type="button"
+                      disabled={dropping === item.id}
+                      onClick={() => void dropSession(item.id)}
+                      className="rounded-full border border-line px-3 py-1 text-xs text-muted hover:text-ink disabled:opacity-40"
+                    >
+                      {dropping === item.id ? "Bırakılıyor" : "Bırak"}
+                    </button>
+                  )}
                 </div>
-                <span className="text-sm font-semibold text-primary">{score}</span>
-              </Link>
+              </div>
             );
           })}
         </div>
@@ -224,7 +274,15 @@ export function HomePage() {
           )}
         </div>
 
-        {trainings.isError && <p className="text-sm text-accent">Katalog alınamadı.</p>}
+        <label className="flex flex-wrap items-center gap-3 text-sm text-muted">Eğitim sektörü
+          <select aria-label="Eğitim sektörü" className="rounded-xl border border-line bg-card px-3 py-2 text-ink" value={sector} onChange={event => setSector(event.target.value)} disabled={catalog.isLoading || catalog.isError}>
+            <option value="">Tüm sektörler</option>
+            {sectors.map(value => <option key={value} value={value}>{sectorLabel(value)}</option>)}
+          </select>
+        </label>
+        {trainings.isLoading && <p className="text-sm text-muted">Eğitimler yükleniyor…</p>}
+        {(trainings.isError || catalog.isError) && <p role="alert" className="text-sm text-accent">Katalog alınamadı. <button type="button" className="underline" onClick={() => { void catalog.refetch(); if (sector) void filteredTrainings.refetch(); }}>Tekrar dene</button></p>}
+        {trainings.data?.items.length === 0 && <p className="rounded-2xl border border-line bg-card p-5 text-sm text-muted">{sector ? "Seçtiğiniz sektörde eğitim bulunamadı." : "Henüz yayımlanmış eğitim bulunmuyor."}</p>}
 
         <div className="grid gap-4 sm:grid-cols-2">
           {trainings.data?.items.map((training) => (

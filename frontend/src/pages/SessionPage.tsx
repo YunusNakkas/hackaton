@@ -62,7 +62,7 @@ export function SessionPage() {
 
   const evaluation = useQuery({
     queryKey: ["evaluation", sessionId],
-    enabled: session?.status === "finished",
+    enabled: session?.status === "finished" && session.evaluation_status !== null,
     queryFn: () => api<EvaluationEnvelope>(`/sessions/${sessionId}/evaluation`),
     refetchInterval: (query) => (query.state.data?.status === "pending" ? 1500 : 15000),
   });
@@ -238,6 +238,18 @@ export function SessionPage() {
     }
   }
 
+  async function abandon() {
+    setNotice(null);
+    try {
+      await api(`/sessions/${sessionId}/abandon`, { method: "POST" });
+      await queryClient.invalidateQueries({ queryKey: ["session", sessionId] });
+      await queryClient.invalidateQueries({ queryKey: ["assignments"] });
+      await queryClient.invalidateQueries({ queryKey: ["my-sessions"] });
+    } catch (error) {
+      setNotice(isApiError(error) ? error.message : "Prova bırakılamadı.");
+    }
+  }
+
   async function retryEvaluation() {
     const id = evaluation.data?.evaluation_job_id;
     if (!id) return;
@@ -293,18 +305,35 @@ export function SessionPage() {
           </p>
         </div>
         {!finished && isOwner && !phone && (
-          <button
-            type="button"
-            onClick={() => void finish()}
-            disabled={session.employee_turn_count === 0 || jobBusy || sending}
-            className="rounded-full border border-ink px-4 py-2 text-sm disabled:opacity-40"
-          >
-            Bitir ve değerlendir
-          </button>
+          session.employee_turn_count === 0 ? (
+            <button
+              type="button"
+              onClick={() => void abandon()}
+              disabled={jobBusy || sending}
+              className="rounded-full border border-line px-4 py-2 text-sm text-muted disabled:opacity-40"
+            >
+              Vazgeç
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void finish()}
+              disabled={jobBusy || sending}
+              className="rounded-full border border-ink px-4 py-2 text-sm disabled:opacity-40"
+            >
+              Bitir ve değerlendir
+            </button>
+          )
         )}
       </div>
 
-      {finished && (
+      {finished && !session.evaluation_status && (
+        <p className="mt-8 rounded-2xl border border-line bg-card px-5 py-4 text-sm text-muted">
+          Bu prova cevap verilmeden bırakıldı. Puan üretilmedi.
+        </p>
+      )}
+
+      {finished && session.evaluation_status && (
         <div className="mt-8">
           {me.data?.user.role === "manager" && evaluation.data?.report && (
             <div className="mb-6 rounded-3xl border border-primary/30 bg-primary/5 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -373,8 +402,9 @@ export function SessionPage() {
           canTalk={canSend && !shouldEnd}
           notice={callNote}
           onUpload={sendAudio}
-          onHangup={() => void finish()}
-          hangupDisabled={session.employee_turn_count === 0 || jobBusy || sending}
+          onHangup={() => void (session.employee_turn_count === 0 ? abandon() : finish())}
+          hangupDisabled={jobBusy || sending}
+          hangupLabel={session.employee_turn_count === 0 ? "Aramayı bırak" : "Aramayı kapat"}
         />
       )}
 

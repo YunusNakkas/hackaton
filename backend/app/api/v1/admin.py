@@ -50,6 +50,7 @@ def overview(me: User = Depends(require_manager), db: Session = Depends(get_db))
         .filter(PracticeSession.org_id == org, Evaluation.status == "needs_review", not_(reviewed)).count(),
         "sessions_last_7_days": db.query(PracticeSession)
         .filter(PracticeSession.org_id == org, PracticeSession.started_at >= utcnow() - timedelta(days=7)).count(),
+        "active_sessions": db.query(PracticeSession).filter_by(org_id=org, status="active").count(),
     }
 
 

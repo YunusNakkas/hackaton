@@ -14,7 +14,7 @@ import { CreateDraftModal } from "../components/CreateDraftModal";
 import { CreateEmployeeModal } from "../components/CreateEmployeeModal";
 import { EmployeeDetailModal } from "../components/EmployeeDetailModal";
 import { ReviewModal } from "../components/ReviewModal";
-import { evaluationLabel, sectorLabel } from "../lib/labels";
+import { channelLabel, evaluationLabel, sectorLabel, summaryOutcome } from "../lib/labels";
 
 type AdminTab = "overview" | "employees" | "reviews" | "drafts";
 
@@ -207,7 +207,7 @@ export function AdminPage() {
       {activeTab === "overview" && (
         <div className="space-y-8 animate-in fade-in duration-200">
           {/* Metrik Kartları */}
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3.5">
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3.5">
             <div className="rounded-2xl border border-line bg-card p-5 shadow-xs">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted">
                 Aktif Çalışan
@@ -225,7 +225,17 @@ export function AdminPage() {
               <p className="mt-2 font-serif text-3xl font-bold text-primary">
                 {overview.data?.open_assignments ?? "-"}
               </p>
-              <p className="mt-1 text-xs text-muted">Bekleyen veya devam eden</p>
+              <p className="mt-1 text-xs text-muted">Yönetici ataması, henüz kapanmamış</p>
+            </div>
+
+            <div className="rounded-2xl border border-line bg-card p-5 shadow-xs">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted">
+                Süren prova
+              </p>
+              <p className="mt-2 font-serif text-3xl font-bold text-ink">
+                {overview.data?.active_sessions ?? "-"}
+              </p>
+              <p className="mt-1 text-xs text-muted">Katalog ve atama, cevap sürüyor</p>
             </div>
 
             <div className="rounded-2xl border border-line bg-card p-5 shadow-xs">
@@ -365,7 +375,7 @@ export function AdminPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-xs px-2.5 py-1 rounded-full bg-card border border-line text-muted">
-                        {emp.open_assignments} açık
+                        {emp.open_assignments} atama{emp.active_sessions > 0 ? ` · ${emp.active_sessions} süren` : ""}
                       </span>
                       <button
                         type="button"
@@ -451,10 +461,14 @@ export function AdminPage() {
                       </span>
                     </div>
 
-                    <div className="mt-5 grid grid-cols-2 gap-2 text-center">
+                    <div className="mt-5 grid grid-cols-3 gap-2 text-center">
                       <div className="rounded-xl border border-line bg-card-subtle p-2">
                         <p className="text-[11px] text-muted uppercase">Açık Atama</p>
                         <p className="mt-0.5 font-semibold text-ink text-sm">{emp.open_assignments}</p>
+                      </div>
+                      <div className="rounded-xl border border-line bg-card-subtle p-2">
+                        <p className="text-[11px] text-muted uppercase">Süren</p>
+                        <p className="mt-0.5 font-semibold text-ink text-sm">{emp.active_sessions}</p>
                       </div>
                       <div className="rounded-xl border border-line bg-card-subtle p-2">
                         <p className="text-[11px] text-muted uppercase">Tamamlanan</p>
@@ -561,11 +575,11 @@ export function AdminPage() {
                       <span className="text-sm text-muted">{item.training.title}</span>
                       <span className="text-line">·</span>
                       <span className="text-xs text-muted">
-                        {new Date(item.started_at).toLocaleDateString("tr-TR")}
+                        {channelLabel(item.channel)} · {new Date(item.started_at).toLocaleDateString("tr-TR")}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 text-xs text-muted">
-                      <span>{item.employee_turn_count} cevap</span>
+                      <span>{item.employee_turn_count} cevap · {summaryOutcome(item)}</span>
                       <span>·</span>
                       {(item.evaluation_status === "ready" || item.evaluation_status === "needs_review") && (
                         <span>AI Durumu: {evaluationLabel[item.evaluation_status]}</span>

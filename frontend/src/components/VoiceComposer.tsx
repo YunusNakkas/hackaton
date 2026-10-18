@@ -6,10 +6,12 @@ export function VoiceComposer({
   onUpload,
   variant = "dock",
   handsFree = false,
+  idleLabel = "Bağlanıyor",
 }: {
   disabled: boolean;
   variant?: "dock" | "call";
   handsFree?: boolean;
+  idleLabel?: string;
   onUpload: (file: { blob: Blob; durationMs: number; filename: string; clientRequestId: string }) => Promise<void>;
 }) {
   const [mics, setMics] = useState<MicInput[]>([]);
@@ -47,7 +49,15 @@ export function VoiceComposer({
   }, []);
 
   useEffect(() => {
-    void listMics().then(setMics).catch(() => setMics([]));
+    void listMics()
+      .then((next) => {
+        setMics(next);
+        const risky = next.some((mic) => mic.bluetooth);
+        const internal = next.find((mic) => mic.builtin || isBuiltinLabel(mic.label));
+        if (risky) setBluetooth(true);
+        if (risky && internal) setDeviceId((current) => current || internal.deviceId);
+      })
+      .catch(() => setMics([]));
   }, []);
 
   const selected = mics.find((mic) => mic.deviceId === deviceId);
@@ -57,6 +67,7 @@ export function VoiceComposer({
   async function refreshMics() {
     const next = await listMics();
     setMics(next);
+    if (next.some((mic) => mic.bluetooth)) setBluetooth(true);
   }
 
   async function upload(file: { blob: Blob; durationMs: number; filename: string; clientRequestId: string }) {
@@ -157,12 +168,12 @@ export function VoiceComposer({
       <div className={call ? "flex flex-col items-center gap-4" : "flex flex-wrap items-center gap-3"}>
         {call ? (
           <div
-            className={`grid h-28 w-28 place-items-center rounded-full text-sm font-semibold text-white ${
-              recording ? "bg-pine" : "bg-white/15"
+            className={`grid h-28 w-28 shrink-0 place-items-center rounded-full text-sm font-semibold text-white ${
+              recording ? "bg-pine" : idleLabel === "Dokun" ? "bg-accent" : "bg-white/25"
             }`}
             aria-hidden
           >
-            {sending ? "Gidiyor" : recording ? "Hatta" : "Bağlanıyor"}
+            {sending ? "Gidiyor" : recording ? "Hatta" : idleLabel}
           </div>
         ) : (
           <button
@@ -223,14 +234,14 @@ export function VoiceComposer({
           </button>
         )}
         <div className={`flex items-center gap-2 ${call ? "w-40" : "min-w-36 flex-1"}`} aria-label="Mikrofon seviyesi">
-          <span className="h-2 flex-1 overflow-hidden rounded-full bg-line">
+          <span className={`h-2 flex-1 overflow-hidden rounded-full ${call ? "bg-white/20" : "bg-line"}`}>
             <span className="block h-full bg-primary transition-[width]" style={{ width: `${Math.round(level * 100)}%` }} />
           </span>
         </div>
       </div>
 
       {mics.length > 1 && (
-        <label className={`mt-3 block text-sm ${call ? "w-full max-w-xs text-paper/70" : "text-muted"}`}>
+        <label className={`mt-3 block text-sm ${call ? "w-full max-w-xs text-white/70" : "text-muted"}`}>
           Mikrofon
           <select
             className="mt-1 w-full rounded-xl border border-line bg-card p-2 text-ink"
@@ -254,16 +265,15 @@ export function VoiceComposer({
 
       {warnBluetooth && (
         <p className="mt-2 text-sm text-warn">
-          Dahili mikrofon önerilir{deviceLabel ? ` (${deviceLabel})` : ""}.
-          {builtin && (
+          {isBluetoothLabel(deviceLabel || selected?.label || "")
+            ? `Kayıt ${deviceLabel || selected?.label || "Bluetooth mikrofonuna"} düşebilir. Dahili mikrofon önerilir.`
+            : "Listede iPhone veya Bluetooth mikrofon var. Kayıt dahili mikrofona alındı."}
+          {builtin && isBluetoothLabel(deviceLabel || selected?.label || "") && (
             <button
               type="button"
               className="ml-2 underline"
               disabled={recording || sending}
-              onClick={() => {
-                setDeviceId(builtin.deviceId);
-                setBluetooth(false);
-              }}
+              onClick={() => setDeviceId(builtin.deviceId)}
             >
               Dahiliye geç
             </button>

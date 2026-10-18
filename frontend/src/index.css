@@ -56,6 +56,42 @@
   --color-warn-soft: var(--pm-warn-soft);
 }
 
+[data-theme="quartz"] {
+  /* Sıcak kuvars ve turuncu */
+  --pm-paper: #f5f1ed;
+  --pm-card: #fffcf9;
+  --pm-card-subtle: #ede5dd;
+  --pm-ink: #302720;
+  --pm-muted: #756456;
+  --pm-line: #ddcfc2;
+  --pm-primary: #c2410c;
+  --pm-primary-hover: #9a3412;
+  --pm-accent: #be123c;
+  --pm-accent-soft: #ffe4e6;
+  --pm-pine: #28745a;
+  --pm-pine-soft: #e1f0e7;
+  --pm-warn: #92400e;
+  --pm-warn-soft: #ffedd5;
+}
+
+[data-theme="charcoal"] {
+  /* Çok koyu gri ve turuncu */
+  --pm-paper: #141414;
+  --pm-card: #202020;
+  --pm-card-subtle: #2c2c2c;
+  --pm-ink: #faf5ef;
+  --pm-muted: #b9aaa0;
+  --pm-line: #41403e;
+  --pm-primary: #fb923c;
+  --pm-primary-hover: #fdba74;
+  --pm-accent: #fb7185;
+  --pm-accent-soft: #431c26;
+  --pm-pine: #86d9af;
+  --pm-pine-soft: #19392c;
+  --pm-warn: #fbbf24;
+  --pm-warn-soft: #443119;
+}
+
 html {
   background: var(--pm-paper);
   color: var(--pm-ink);
@@ -80,7 +116,7 @@ textarea {
 }
 
 ::selection {
-  background: #38bdf840;
+  background: color-mix(in srgb, var(--pm-primary) 25%, transparent);
   color: inherit;
 }
 
@@ -101,10 +137,11 @@ textarea {
 }
 
 :root { color-scheme: light; }
-[data-theme="dark"] { color-scheme: dark; }
+[data-theme="dark"], [data-theme="charcoal"] { color-scheme: dark; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; }
 :focus-visible { outline: 2px solid var(--pm-primary); outline-offset: 3px; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
 
-[data-theme="dark"] .bg-primary.text-white, [data-theme="dark"] .bg-pine.text-white, [data-theme="dark"] .bg-warn.text-white { color: #080f24; }
+[data-theme="dark"] .bg-primary.text-white, [data-theme="dark"] .from-primary.text-white, [data-theme="dark"] .bg-pine.text-white, [data-theme="dark"] .bg-warn.text-white { color: #080f24; }
+[data-theme="charcoal"] .bg-primary.text-white, [data-theme="charcoal"] .from-primary.text-white, [data-theme="charcoal"] .bg-pine.text-white, [data-theme="charcoal"] .bg-warn.text-white { color: #141414; }

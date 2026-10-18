@@ -1,3 +1,4 @@
+import os
 import shutil
 import subprocess
 import sys
@@ -34,7 +35,7 @@ def test_migrations_upgrade_populated_database(tmp_path):
     import sqlite3
 
     db = tmp_path / "dolu.sqlite3"
-    env = {"PM_DATABASE_URL": f"sqlite:///{db}", "PATH": "/usr/bin:/bin"}
+    env = {**os.environ, "PM_DATABASE_URL": f"sqlite:///{db}"}
     alembic = [sys.executable, "-m", "alembic"]
     run = lambda *a: subprocess.run([*alembic, *a], cwd=BACKEND, env=env, capture_output=True, text=True)  # noqa: E731
     assert run("upgrade", "4429862e877f").returncode == 0

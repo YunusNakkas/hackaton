@@ -4,10 +4,10 @@ import { Link, NavLink, Outlet } from "react-router-dom";
 import { api } from "../api/client";
 import type { Health, Me } from "../api/types";
 import { AssignModal } from "./AssignModal";
-import { useTheme } from "../lib/theme";
+import { ThemePicker } from "./ThemePicker";
+import { BrandLogo } from "./BrandLogo";
 
 export function Shell() {
-  const { theme, toggleTheme } = useTheme();
   const [quickAssignOpen, setQuickAssignOpen] = useState(false);
 
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<Me>("/me") });
@@ -28,9 +28,7 @@ export function Shell() {
         <div className="mx-auto flex max-w-6xl items-center gap-4 px-5 py-3">
           {/* Logo & Brand */}
           <Link to="/" className="flex items-center gap-2 group">
-            <div className="h-8 w-8 rounded-xl bg-gradient-to-tr from-primary to-sky-400 text-white flex items-center justify-center font-bold text-sm shadow-xs group-hover:scale-105 transition-transform">
-              P
-            </div>
+            <BrandLogo />
             <span className="font-serif text-xl tracking-tight text-ink font-semibold">
               ProvaMüşteri
             </span>
@@ -94,46 +92,7 @@ export function Shell() {
               </button>
             )}
 
-            {/* Tema Değiştirme Butonu */}
-            <button
-              type="button"
-              onClick={toggleTheme}
-              aria-label="Temayı değiştir"
-              title={theme === "dark" ? "Açık Temaya Geç (Çok Açık Mavi)" : "Karanlık Temaya Geç (Lacivert)"}
-              className="flex items-center justify-center h-8 w-8 rounded-full border border-line bg-card-subtle text-ink hover:border-primary/40 transition-colors cursor-pointer"
-            >
-              {theme === "dark" ? (
-                // Güneş ikonu (açık temaya geçiş)
-                <svg
-                  className="w-4 h-4 text-amber-400"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
-                  />
-                </svg>
-              ) : (
-                // Ay ikonu (lacivert temaya geçiş)
-                <svg
-                  className="w-4 h-4 text-sky-700"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
-                  />
-                </svg>
-              )}
-            </button>
+            <ThemePicker />
 
             {/* Kullanıcı Profili ve Rol */}
             <div className="flex items-center gap-2 pl-1 sm:border-l sm:border-line">

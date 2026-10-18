@@ -53,7 +53,7 @@ def test_overview_counts(manager_client):
     res = manager_client.get("/api/v1/admin/overview").json()
     assert_contract("AdminOverview", res)
     assert res == {"active_employees": 2, "open_assignments": 1, "completed_assignments": 0,
-                   "sessions_pending_review": 0, "sessions_last_7_days": 0}
+                   "sessions_pending_review": 0, "sessions_last_7_days": 0, "active_sessions": 0}
 
 
 def test_employee_lifecycle(manager_client, env):

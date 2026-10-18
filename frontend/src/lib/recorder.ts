@@ -22,6 +22,16 @@ export function isBuiltinLabel(label: string) {
   return BUILTIN.test(label.toLowerCase());
 }
 
+function captureConstraints(deviceId?: string): MediaTrackConstraints {
+  const audio: MediaTrackConstraints = {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+  };
+  if (deviceId) audio.deviceId = { exact: deviceId };
+  return audio;
+}
+
 export interface MicInput {
   deviceId: string;
   label: string;
@@ -143,7 +153,7 @@ export function recordUntilSilence(
   let started = 0;
 
   const done = navigator.mediaDevices
-    .getUserMedia({ audio: options.deviceId ? { deviceId: { exact: options.deviceId } } : true })
+    .getUserMedia({ audio: captureConstraints(options.deviceId) })
     .then(
       (stream) =>
         new Promise<Recording | null>((resolve, reject) => {
@@ -214,6 +224,8 @@ export function recordUntilSilence(
               }
               const rms = Math.sqrt(sum / data.length);
               options.onLevel?.(Math.min(1, rms / 0.08));
+              // Kaydın ilk 0,6 sn'si analize girmez: hoparlörden sızan müşteri sesi konuşma sanılıyordu.
+              if (now - started < 600) return;
               if (detector.push(rms, now) === "stop") media.stop();
             }, 100);
           } else {
@@ -259,7 +271,7 @@ export function recordOnce(maxMs = 30_000, onTick?: (elapsed: number) => void): 
   const chunks: Blob[] = [];
   let started = 0;
 
-  const done = navigator.mediaDevices.getUserMedia({ audio: true }).then(
+  const done = navigator.mediaDevices.getUserMedia({ audio: captureConstraints() }).then(
     (stream) =>
       new Promise<{ blob: Blob; durationMs: number }>((resolve, reject) => {
         const media = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);

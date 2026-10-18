@@ -326,6 +326,28 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
+  /sessions/{sessionId}/abandon:
+    post:
+      tags: [sessions]
+      operationId: abandonSession
+      description: |
+        Cevap verilmemiş aktif provayı puan üretmeden kapatır. Atama bu yüzden
+        `in_progress` olduysa yeniden `assigned` olur. Zaten kapalıysa aynı sonucu döner.
+        Hazır bir çalışan cevabı varsa 409; o oturum `finish` ile değerlendirilir.
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: Prova puanlanmadan kapandı
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AbandonAccepted" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
   /sessions/{sessionId}/evaluation:
     get:
       tags: [sessions]
@@ -1241,6 +1263,11 @@ components:
       properties:
         session_id: { $ref: "#/components/schemas/Id" }
         evaluation_job_id: { $ref: "#/components/schemas/Id" }
+    AbandonAccepted:
+      type: object
+      required: [session_id]
+      properties:
+        session_id: { $ref: "#/components/schemas/Id" }
     SessionSummary:
       type: object
       required:
@@ -1253,9 +1280,17 @@ components:
         - total
         - employee_turn_count
         - practice_mode
+        - channel
+        - model_runtime
         - started_at
         - finished_at
       properties:
+        channel: { $ref: "#/components/schemas/PracticeChannel" }
+        model_runtime:
+          description: Raporu üreten çalışma zamanı. `stub` ise puan gerçektir sayılmaz. Rapor yoksa null.
+          oneOf:
+            - { type: string }
+            - { type: "null" }
         practice_mode:
           description: Tekrar oturumuysa modu; değilse null.
           oneOf:
@@ -1588,15 +1623,20 @@ components:
         - completed_assignments
         - sessions_pending_review
         - sessions_last_7_days
+        - active_sessions
       properties:
         active_employees: { type: integer, minimum: 0 }
         open_assignments: { type: integer, minimum: 0 }
         completed_assignments: { type: integer, minimum: 0 }
         sessions_pending_review: { type: integer, minimum: 0 }
         sessions_last_7_days: { type: integer, minimum: 0 }
+        active_sessions:
+          description: Katalogdan veya atamadan açılmış, henüz kapanmamış provalar.
+          type: integer
+          minimum: 0
     Employee:
       type: object
-      required: [id, email, display_name, active, created_at, open_assignments, completed_sessions, last_session_at]
+      required: [id, email, display_name, active, created_at, open_assignments, active_sessions, completed_sessions, last_session_at]
       properties:
         id: { $ref: "#/components/schemas/Id" }
         email: { type: string, format: email }
@@ -1604,6 +1644,7 @@ components:
         active: { type: boolean }
         created_at: { $ref: "#/components/schemas/Timestamp" }
         open_assignments: { type: integer, minimum: 0 }
+        active_sessions: { type: integer, minimum: 0 }
         completed_sessions: { type: integer, minimum: 0 }
         last_session_at:
           oneOf:

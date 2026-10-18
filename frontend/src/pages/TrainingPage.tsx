@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { allPages, api, isApiError } from "../api/client";
 import type { Assignment, CreateSessionResponse, Health, Me, PracticeChannel, TrainingDetail } from "../api/types";
 import { AssignModal } from "../components/AssignModal";
+import { primeCallAudio } from "../lib/callAudio";
 import { difficultyLabel, sectorLabel } from "../lib/labels";
 
 export function TrainingPage() {
@@ -145,7 +146,10 @@ export function TrainingPage() {
               type="button"
               disabled={start.isPending || !audioOk}
               title={audioOk ? undefined : "Bu kurulumda sesli cevap desteklenmiyor"}
-              onClick={() => start.mutate("phone")}
+              onClick={() => {
+                primeCallAudio();
+                start.mutate("phone");
+              }}
               className="rounded-full border border-ink px-8 py-3 text-sm font-semibold disabled:opacity-50"
             >
               Telefon provası
