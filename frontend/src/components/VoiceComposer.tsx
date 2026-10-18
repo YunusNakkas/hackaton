@@ -6,11 +6,13 @@ export function VoiceComposer({
   onUpload,
   variant = "dock",
   handsFree = false,
+  hideInputs = false,
   idleLabel = "Bağlanıyor",
 }: {
   disabled: boolean;
   variant?: "dock" | "call";
   handsFree?: boolean;
+  hideInputs?: boolean;
   idleLabel?: string;
   onUpload: (file: { blob: Blob; durationMs: number; filename: string; clientRequestId: string }) => Promise<void>;
 }) {
@@ -19,7 +21,6 @@ export function VoiceComposer({
   const [recording, setRecording] = useState(false);
   const [level, setLevel] = useState(0);
   const [quiet, setQuiet] = useState(false);
-  const [bluetooth, setBluetooth] = useState(false);
   const [deviceLabel, setDeviceLabel] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -41,22 +42,20 @@ export function VoiceComposer({
     void listMics()
       .then((next) => {
         setMics(next);
-        const risky = next.some((mic) => mic.bluetooth);
         const internal = next.find((mic) => mic.builtin || isBuiltinLabel(mic.label));
-        if (risky) setBluetooth(true);
-        if (risky && internal) setDeviceId((current) => current || internal.deviceId);
+        if (internal) setDeviceId((current) => current || internal.deviceId);
       })
       .catch(() => setMics([]));
   }, []);
 
   const selected = mics.find((mic) => mic.deviceId === deviceId);
   const builtin = mics.find((mic) => mic.builtin || isBuiltinLabel(mic.label));
-  const warnBluetooth = bluetooth || Boolean(selected && isBluetoothLabel(selected.label));
+  const activeLabel = deviceLabel || selected?.label || "";
+  const warnBluetooth = Boolean(activeLabel && isBluetoothLabel(activeLabel));
 
   async function refreshMics() {
     const next = await listMics();
     setMics(next);
-    if (next.some((mic) => mic.bluetooth)) setBluetooth(true);
   }
 
   async function upload(file: { blob: Blob; durationMs: number; filename: string; clientRequestId: string }) {
@@ -89,7 +88,6 @@ export function VoiceComposer({
       },
       onDevice: (device) => {
         setDeviceLabel(device.label);
-        setBluetooth(device.bluetooth);
       },
     });
     handle.current = session;
@@ -141,9 +139,15 @@ export function VoiceComposer({
       <div className={call ? "flex flex-col items-center gap-4" : "flex flex-wrap items-center gap-3"}>
         {call ? (
           <div
-            className={`grid h-28 w-28 shrink-0 place-items-center rounded-full text-sm font-semibold text-white ${
-              recording ? "bg-pine" : idleLabel === "Dokun" ? "bg-accent" : "bg-white/25"
-            }`}
+            className={`grid h-[4.5rem] w-[4.5rem] shrink-0 place-items-center rounded-full text-xs font-semibold text-white ${
+              recording
+                ? "bg-[#2f9d6a] shadow-[0_0_0_8px_rgba(47,157,106,0.18)]"
+                : idleLabel === "Dokun"
+                  ? "bg-accent"
+                  : idleLabel === "Kapandı"
+                    ? "bg-white/10 text-white/60"
+                    : "bg-white/20"
+            } ${!recording && idleLabel !== "Kapandı" ? "animate-pulse" : ""}`}
             aria-hidden
           >
             {sending ? "Gidiyor" : recording ? "Hatta" : idleLabel}
@@ -167,24 +171,29 @@ export function VoiceComposer({
             Vazgeç
           </button>
         )}
-        <div className={`flex items-center gap-2 ${call ? "w-40" : "min-w-36 flex-1"}`} aria-label="Mikrofon seviyesi">
-          <span className={`h-2 flex-1 overflow-hidden rounded-full ${call ? "bg-white/20" : "bg-line"}`}>
-            <span className="block h-full bg-primary transition-[width]" style={{ width: `${Math.round(level * 100)}%` }} />
-          </span>
-        </div>
+        {(recording || !call) && (
+          <div className={`flex items-center gap-2 ${call ? "w-40" : "min-w-36 flex-1"}`} aria-label="Mikrofon seviyesi">
+            <span className={`h-2 flex-1 overflow-hidden rounded-full ${call ? "bg-white/20" : "bg-line"}`}>
+              <span className="block h-full bg-primary transition-[width]" style={{ width: `${Math.round(level * 100)}%` }} />
+            </span>
+          </div>
+        )}
       </div>
 
-      {mics.length > 1 && (
-        <label className={`mt-3 block text-sm ${call ? "w-full max-w-xs text-white/70" : "text-muted"}`}>
-          Mikrofon
+      {!hideInputs && mics.length > 1 && (
+        <label className={`mt-2 block text-xs ${call ? "w-full max-w-xs text-white/45" : "text-muted"}`}>
+          <span className="sr-only">Mikrofon</span>
           <select
-            className="mt-1 w-full rounded-xl border border-line bg-card p-2 text-ink"
+            className={`mt-1 w-full rounded-xl border px-3 py-1.5 text-xs ${
+              call ? "border-white/10 bg-[#071426] text-white/80" : "border-line bg-card p-2 text-sm text-ink"
+            }`}
             value={deviceId}
             disabled={recording || sending}
             onChange={(event) => {
-              setDeviceId(event.target.value);
-              setBluetooth(false);
-              setDeviceLabel("");
+              const next = event.target.value;
+              setDeviceId(next);
+              const mic = mics.find((item) => item.deviceId === next);
+              setDeviceLabel(mic?.label ?? "");
             }}
           >
             <option value="">Tarayıcının seçtiği</option>
@@ -197,17 +206,18 @@ export function VoiceComposer({
         </label>
       )}
 
-      {warnBluetooth && (
-        <p className="mt-2 text-sm text-warn">
-          {isBluetoothLabel(deviceLabel || selected?.label || "")
-            ? `Kayıt ${deviceLabel || selected?.label || "Bluetooth mikrofonuna"} düşebilir. Dahili mikrofon önerilir.`
-            : "Listede iPhone veya Bluetooth mikrofon var. Kayıt dahili mikrofona alındı."}
-          {builtin && isBluetoothLabel(deviceLabel || selected?.label || "") && (
+      {!hideInputs && warnBluetooth && (
+        <p className={`mt-2 text-xs ${call ? "max-w-xs text-center text-[#ffd48a]" : "text-warn"}`}>
+          Kayıt {activeLabel} üzerine düşebilir. Dahili mikrofon önerilir.
+          {builtin && (
             <button
               type="button"
-              className="ml-2 underline"
+              className="ml-1 underline"
               disabled={recording || sending}
-              onClick={() => setDeviceId(builtin.deviceId)}
+              onClick={() => {
+                setDeviceId(builtin.deviceId);
+                setDeviceLabel(builtin.label);
+              }}
             >
               Dahiliye geç
             </button>

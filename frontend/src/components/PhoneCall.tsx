@@ -9,6 +9,7 @@ export function PhoneCall({
   sessionId,
   waiting,
   canTalk,
+  ended,
   notice,
   onUpload,
   onHangup,
@@ -20,6 +21,7 @@ export function PhoneCall({
   sessionId: string;
   waiting: boolean;
   canTalk: boolean;
+  ended?: boolean;
   notice: string | null;
   onUpload: (file: { blob: Blob; durationMs: number; filename: string; clientRequestId: string }) => Promise<void>;
   onHangup: () => void;
@@ -63,7 +65,7 @@ export function PhoneCall({
 
   useEffect(() => {
     const element = audio.current;
-    if (!audioReady || !element || !unheard || !src) return;
+    if (!audioReady || !element || !unheard || !src || ended) return;
     setPlaying(true);
     setBlocked(false);
     element.src = src;
@@ -71,35 +73,38 @@ export function PhoneCall({
       setPlaying(false);
       setBlocked(true);
     });
-  }, [audioReady, src, unheard, customer?.id]);
+  }, [audioReady, src, unheard, customer?.id, ended]);
 
   useEffect(() => {
-    if (unheard || playing || blocked || !canTalk) {
+    if (ended || unheard || playing || blocked || !canTalk) {
       setEar(false);
       return;
     }
     const timer = window.setTimeout(() => setEar(true), 800);
     return () => window.clearTimeout(timer);
-  }, [unheard, playing, blocked, canTalk, customer?.id]);
+  }, [ended, unheard, playing, blocked, canTalk, customer?.id]);
 
-  const listening = canTalk && !unheard && !playing && !blocked && ear;
-  const line = blocked
-    ? "Arama açık. Devam etmek için ekrana dokun."
-    : unheard || playing
-      ? "Müşteri konuşuyor"
-      : waiting || customer?.status === "processing"
-        ? "Müşteri cevap veriyor"
-        : listening
-          ? "Seni dinliyor. Sustuğunda söz ona geçer."
-          : canTalk
-            ? "Sıra sana geliyor"
-            : "Hat kuruluyor";
+  const listening = !ended && canTalk && !unheard && !playing && !blocked && ear;
+  const line = ended
+    ? (notice ?? "Arama bitti")
+    : blocked
+      ? "Arama açık. Devam etmek için ekrana dokun."
+      : unheard || playing
+        ? "Müşteri konuşuyor"
+        : waiting || customer?.status === "processing"
+          ? "Müşteri cevap veriyor"
+          : listening
+            ? "Seni dinliyor. Sustuğunda söz ona geçer."
+            : canTalk
+              ? "Sıra sana geliyor"
+              : "Hat kuruluyor";
+  const idleLabel = ended ? "Kapandı" : blocked ? "Dokun" : waiting ? "Bekliyor" : "Bağlanıyor";
 
   return (
     <section
-      className="mt-4 flex min-h-0 flex-1 flex-col justify-between overflow-y-auto rounded-[2rem] bg-[#0c1e3a] px-6 py-8 text-[#f0f7ff]"
+      className="mt-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[2rem] bg-[#0c1e3a] text-[#f0f7ff]"
       onClick={() => {
-        if (!blocked || !audio.current) return;
+        if (ended || !blocked || !audio.current) return;
         void audio.current.play().then(
           () => {
             setBlocked(false);
@@ -109,36 +114,11 @@ export function PhoneCall({
         );
       }}
     >
-      <div className="text-center">
-        <p className="text-xs tracking-[0.2em] text-white/50">TELEFON</p>
-        <h2 className="mt-3 font-serif text-4xl tracking-tight">{title}</h2>
-        <p className="mt-2 text-sm text-white/70">{notice ?? line}</p>
-      </div>
-
-      <div className="mx-auto w-full max-w-md space-y-3 text-sm">
-        {customer?.text && (
-          <p className="rounded-2xl bg-white/10 px-4 py-3">
-            <span className="block text-xs text-white/50">Müşteri</span>
-            {customer.text}
-          </p>
-        )}
-        {mine && (
-          <p className="rounded-2xl bg-white/5 px-4 py-3 text-white/80">
-            <span className="block text-xs text-white/50">Sen</span>
-            {mine.text}
-          </p>
-        )}
-      </div>
-
-      <div className="mx-auto w-full max-w-md">
-        <div ref={holder} className="hidden" />
-        <VoiceComposer
-          variant="call"
-          handsFree={listening}
-          disabled={!listening}
-          idleLabel={blocked ? "Dokun" : "Bağlanıyor"}
-          onUpload={onUpload}
-        />
+      <header className="flex shrink-0 items-start justify-between gap-3 px-5 pt-5">
+        <div>
+          <p className="text-[11px] tracking-[0.28em] text-white/40">TELEFON</p>
+          <p className="mt-1.5 text-sm text-white/80">{line}</p>
+        </div>
         <button
           type="button"
           onClick={(event) => {
@@ -146,11 +126,45 @@ export function PhoneCall({
             onHangup();
           }}
           disabled={hangupDisabled}
-          className="mx-auto mt-6 block rounded-full bg-accent px-5 py-2 text-sm text-white disabled:opacity-40"
+          className="shrink-0 rounded-full bg-[#ff5b6e] px-3.5 py-1.5 text-xs font-medium text-white disabled:opacity-40"
         >
           {hangupLabel}
         </button>
+      </header>
+
+      <div className="min-h-[7rem] flex-1 overflow-y-auto px-5 py-4">
+        <div className="mx-auto w-full max-w-md space-y-3 text-sm">
+          {customer?.text ? (
+            <p className="rounded-2xl bg-white/10 px-4 py-3 leading-relaxed">
+              <span className="mb-1 block text-[11px] uppercase tracking-wider text-white/45">Müşteri</span>
+              {customer.text}
+            </p>
+          ) : (
+            <p className="rounded-2xl bg-white/5 px-4 py-3 text-sm text-white/50">
+              Hat açılıyor. Müşteri birazdan konuşacak.
+            </p>
+          )}
+          {mine && (
+            <p className="rounded-2xl bg-white/5 px-4 py-3 leading-relaxed text-white/85">
+              <span className="mb-1 block text-[11px] uppercase tracking-wider text-white/45">Sen</span>
+              {mine.text}
+            </p>
+          )}
+        </div>
       </div>
+
+      <footer className="shrink-0 px-5 pb-5 pt-1">
+        <div ref={holder} className="hidden" />
+        <VoiceComposer
+          variant="call"
+          handsFree={listening}
+          disabled={!listening}
+          hideInputs={ended}
+          idleLabel={idleLabel}
+          onUpload={onUpload}
+        />
+        <p className="sr-only">{title}</p>
+      </footer>
     </section>
   );
 }
