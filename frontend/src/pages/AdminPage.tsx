@@ -575,7 +575,8 @@ export function AdminPage() {
                       <span className="text-sm text-muted">{item.training.title}</span>
                       <span className="text-line">·</span>
                       <span className="text-xs text-muted">
-                        {channelLabel(item.channel)} · {new Date(item.started_at).toLocaleDateString("tr-TR")}
+                        {channelLabel(item.channel)}
+                        {item.customer_stance === "strict" ? " · Sert" : ""} · {new Date(item.started_at).toLocaleDateString("tr-TR")}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 text-xs text-muted">

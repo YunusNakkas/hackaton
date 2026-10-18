@@ -90,6 +90,7 @@ class PracticeSession(Base):
     employee_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     assignment_id: Mapped[str | None] = mapped_column(ForeignKey("assignments.id"))
     channel: Mapped[str] = mapped_column(String(16), default="message")  # message | phone
+    customer_stance: Mapped[str] = mapped_column(String(16), default="normal")  # normal | strict
     client_request_id: Mapped[str] = mapped_column(String(36))
     status: Mapped[str] = mapped_column(String(16), default="active")  # active | finished
     prompt_version: Mapped[str] = mapped_column(String(40))

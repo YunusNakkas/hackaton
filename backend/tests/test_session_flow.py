@@ -72,6 +72,7 @@ def test_employee_lists_only_own_sessions(elif_client, can_client):
     assert_contract("SessionSummaryPage", page)
     row = next(item for item in page["items"] if item["id"] == created["session"]["id"])
     assert row["channel"] == "message" and row["model_runtime"] is None
+    assert row["customer_stance"] == "normal"
     assert can_client.get("/api/v1/sessions").json()["items"] == []
 
 
@@ -239,6 +240,43 @@ def test_create_session_is_idempotent(elif_client):
     assert a.json()["session"]["id"] == b.json()["session"]["id"]
 
 
+def test_strict_customer_is_short_and_rule_bound(elif_client):
+    t = _retail_training(elif_client)
+    crid = str(uuid.uuid4())
+    res = elif_client.post("/api/v1/sessions", headers=CSRF, json={
+        "training_id": t["id"], "customer_stance": "strict", "client_request_id": crid})
+    assert res.status_code == 201, res.text
+    session = res.json()["session"]
+    assert session["customer_stance"] == "strict"
+    assert session["versions"]["prompt_version"].endswith("+strict")
+    listed = next(item for item in elif_client.get("/api/v1/sessions").json()["items"] if item["id"] == session["id"])
+    assert listed["customer_stance"] == "strict"
+
+    clash = elif_client.post("/api/v1/sessions", headers=CSRF, json={
+        "training_id": t["id"], "customer_stance": "normal", "client_request_id": crid})
+    assert clash.status_code == 409
+
+    class Spy(PromptSpy):
+        def __init__(self):
+            super().__init__()
+            self.tokens: list[int] = []
+
+        def chat(self, messages, **kw):
+            if kw.get("purpose") == "customer_reply":
+                self.tokens.append(kw["max_new_tokens"])
+            return super().chat(messages, **kw)
+
+    spy = Spy()
+    _upload(elif_client, session["id"])
+    run_once(model=spy)
+    system = spy.customer_system[0]
+    assert "SERT bir müşterisin" in system
+    assert "Bir kerelik" in system
+    assert system.index("Ruh hâlin") < system.index("SERT bir müşterisin") < system.index("Gizli hedefin")
+    assert "en fazla 2 cümle" not in system
+    assert spy.tokens == [70]
+
+
 @pytest.mark.parametrize("mime,audio,status,code", [
     ("text/plain", b"merhaba", 415, "unsupported_media_type"),
     ("audio/webm", b"bu bir ses degil", 422, "audio_undecodable"),
@@ -378,9 +416,21 @@ def test_end_marker_ignored_on_first_turn(elif_client):
     assert job["result"]["session_should_end"] is False
 
 
-def test_end_marker_honored_after_two_turns(elif_client):
+def test_end_marker_ignored_on_second_turn(elif_client):
     model = ScriptedCustomer(["Peki, sonra?", "Tamam, teşekkürler. [GÖRÜŞME_BİTTİ]"])
     sid = _start(elif_client)["session"]["id"]
+    _upload(elif_client, sid)
+    run_once(model=model)
+    job_id = _upload(elif_client, sid).json()["job_id"]
+    run_once(model=model)
+    assert elif_client.get(f"/api/v1/jobs/{job_id}").json()["result"]["session_should_end"] is False
+
+
+def test_end_marker_honored_after_three_turns(elif_client):
+    model = ScriptedCustomer(["Peki, sonra?", "Başka?", "Tamam, teşekkürler. [GÖRÜŞME_BİTTİ]"])
+    sid = _start(elif_client)["session"]["id"]
+    _upload(elif_client, sid)
+    run_once(model=model)
     _upload(elif_client, sid)
     run_once(model=model)
     job_id = _upload(elif_client, sid).json()["job_id"]

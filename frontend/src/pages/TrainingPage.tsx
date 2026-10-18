@@ -13,6 +13,7 @@ export function TrainingPage() {
   const assignmentId = params.get("assignment");
   const navigate = useNavigate();
   const [assignOpen, setAssignOpen] = useState(false);
+  const [strict, setStrict] = useState(false);
 
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<Me>("/me") });
   const health = useQuery({ queryKey: ["health"], queryFn: () => api<Health>("/health") });
@@ -32,12 +33,13 @@ export function TrainingPage() {
   const assignedChannel = assignments.data?.items.find((item) => item.id === assignmentId)?.channel;
 
   const start = useMutation({
-    mutationFn: (channel: PracticeChannel) =>
+    mutationFn: ({ channel, stance }: { channel: PracticeChannel; stance: "normal" | "strict" }) =>
       api<CreateSessionResponse>("/sessions", {
         method: "POST",
         body: JSON.stringify({
           training_id: trainingId,
           channel: assignedChannel ?? channel,
+          customer_stance: stance,
           ...(assignmentId ? { assignment_id: assignmentId } : {}),
           client_request_id: crypto.randomUUID(),
         }),
@@ -129,13 +131,28 @@ export function TrainingPage() {
         </div>
       )}
 
-      <div className="pt-2">
+      <div className="pt-2 space-y-3">
+        <button
+          type="button"
+          aria-pressed={strict}
+          onClick={() => setStrict((on) => !on)}
+          className={`rounded-full px-4 py-2 text-sm font-semibold ${
+            strict ? "bg-ink text-paper" : "border border-line text-muted hover:text-ink"
+          }`}
+        >
+          Sert müşteri
+        </button>
+        <p className="text-xs text-muted">
+          {strict
+            ? "Müşteri kısa konuşur, kuralın dışına çıkmaz ve somut bir adım duymadan yumuşamaz."
+            : "İstersen müşteriyi sert aç: kısa, kuralcı ve kolay yumuşamayan cevaplar."}
+        </p>
         <div className="flex flex-wrap gap-3">
           {assignedChannel !== "phone" && (
             <button
               type="button"
               disabled={start.isPending}
-              onClick={() => start.mutate("message")}
+              onClick={() => start.mutate({ channel: "message", stance: strict ? "strict" : "normal" })}
               className="rounded-full bg-primary px-8 py-3 text-sm font-semibold text-white shadow-md hover:opacity-95 disabled:opacity-50"
             >
               {start.isPending ? "Hazırlanıyor…" : "Mesaj provası"}
@@ -148,7 +165,7 @@ export function TrainingPage() {
               title={audioOk ? undefined : "Bu kurulumda sesli cevap desteklenmiyor"}
               onClick={() => {
                 primeCallAudio();
-                start.mutate("phone");
+                start.mutate({ channel: "phone", stance: strict ? "strict" : "normal" });
               }}
               className="rounded-full border border-ink px-8 py-3 text-sm font-semibold disabled:opacity-50"
             >

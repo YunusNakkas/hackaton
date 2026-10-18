@@ -37,6 +37,7 @@ class CreateSessionRequest(BaseModel):
     training_id: str
     assignment_id: str | None = None
     channel: Literal["message", "phone"] = "message"
+    customer_stance: Literal["normal", "strict"] = "normal"
     client_request_id: uuid.UUID
     practice: PracticeRequest | None = None
 
@@ -118,6 +119,8 @@ def create_session(body: CreateSessionRequest, response: Response,
     if existing:
         if existing.training_id != body.training_id:
             raise conflict("conflict", "Bu istek kimliği farklı bir eğitim için kullanılmış.")
+        if (existing.customer_stance or "normal") != body.customer_stance:
+            raise conflict("conflict", "Bu istek kimliği farklı bir müşteri tutumu için kullanılmış.")
         response.status_code = 200
         opening = db.query(Job).filter_by(session_id=existing.id, kind="opening").one_or_none()
         return {"session": _session_body(db, existing), "opening_job_id": opening.id if opening else None}
@@ -137,10 +140,12 @@ def create_session(body: CreateSessionRequest, response: Response,
     settings = get_settings()
     adaptive = practice is not None and practice.mode == "adaptive"
     channel = assignment.channel if assignment else body.channel
+    suffix = ("+strict" if body.customer_stance == "strict" else "") + ("+adaptive" if adaptive else "")
     s = PracticeSession(org_id=user.org_id, training_id=t.id, employee_id=user.id,
                         assignment_id=assignment.id if assignment else None, channel=channel,
+                        customer_stance=body.customer_stance,
                         client_request_id=crid,
-                        prompt_version=CUSTOMER_VERSION + ("+adaptive" if adaptive else ""),
+                        prompt_version=CUSTOMER_VERSION + suffix,
                         practice_of_session_id=practice.of_session_id if practice else None,
                         practice_mode=practice.mode if practice else None,
                         practice_focus=practice.focus_dimension_ids if practice else None)

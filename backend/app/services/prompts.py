@@ -2,13 +2,25 @@
 
 from typing import Any
 
-CUSTOMER_VERSION = "customer@1"
+CUSTOMER_VERSION = "customer@2"
 EVALUATOR_VERSION = "evaluator@1"
 ASR_VERSION = "asr@1"
 END_MARKER = "[GÖRÜŞME_BİTTİ]"
 ROLE_REMINDER = (
     "Hatırlatma: Sen anlatıcı veya koç değilsin, MÜŞTERİSİN. Çalışanın son cümlesi anlamsız, kaba veya "
     "eksik olsa bile müşteri olarak, birinci tekil şahısla, en fazla 2 cümleyle doğrudan çalışana cevap ver."
+)
+STRICT_ROLE_REMINDER = (
+    "Hatırlatma: Sen MÜŞTERİSİN. Tek cümleyle, kısa ve kapalı cevap ver. Çözüm önerme, yumuşama, küfür etme."
+)
+# Ruh hâlinin hemen ardından gelir; sona konunca etkisi zayıflıyordu.
+STRICT_BLOCK = (
+    "Bu provada SERT bir müşterisin. Ağzın sıkı, kurala takıntılısın:\n"
+    "- Cevabın tek cümle olsun; bazen birkaç kelime yeter. Gönüllü bilgi verme, çözüm önerme.\n"
+    "- Kuralın dışına çıkan, belirsiz veya erteleyen her lafı yakala. "
+    "'Bir kerelik', 'müdür bakar', 'bakarız' kabul değildir.\n"
+    "- Çalışan somut, kurala uygun ve net bir adım söyleyene kadar yumuşama.\n"
+    "- Küfür etme, hakaret etme. Sinirli ve kapalı ol.\n"
 )
 
 
@@ -56,23 +68,34 @@ def adaptive_instructions(rubric: dict[str, Any], focus_ids: list[str]) -> str:
 
 
 def customer_messages(scenario: dict[str, Any], policies: list[dict[str, Any]],
-                      turns: list[tuple[str, str]], adaptive: str = "") -> list[dict[str, Any]]:
-    """turns: (speaker, text) sırası. Müşteri = assistant, çalışan = user. adaptive: adaptive_instructions()."""
+                      turns: list[tuple[str, str]], adaptive: str = "",
+                      stance: str = "normal") -> list[dict[str, Any]]:
+    """turns: (speaker, text) sırası. Müşteri = assistant, çalışan = user.
+
+    adaptive: adaptive_instructions(). stance `strict` ise cevaplar kısa, kuralcı ve geç yumuşar.
+    """
     c = scenario["customer"]
+    strict = stance == "strict"
     visible = [p for p in policies if p["id"] in set(scenario.get("visible_policy_ids", []))]
     known = "\n".join(f"- {p['title']}: {p['body']}" for p in visible) or "- Mağaza kurallarını bilmiyorsun."
     # Zorlaştırma yönergesi ruh hâlinin hemen ardından gelir; prompt sonuna konduğunda etkisi zayıftı.
+    length_rule = ("- Çok kısa Türkçe konuş: tek cümle, bazen birkaç kelime. Fazladan açıklama yapma.\n"
+                   if strict else "- Kısa ve doğal Türkçe konuş, en fazla 2 cümle.\n")
+    soften_rule = ("- Somut ve kurala uygun bir adım duyana kadar yumuşama; geçiştirilirse daha da kapan.\n"
+                   if strict else "- Çalışan iyi bir çözüm sunarsa yumuşa; geçiştirirse ısrar et.\n")
     system = (
         f"Sen bir müşteri hizmetleri provasında MÜŞTERİ rolündesin. Adın: {c['name']}.\n"
         f"Durumun: {c['context']}\nRuh hâlin: {c['mood']}\n"
+        + (STRICT_BLOCK if strict else "")
         + adaptive
         + f"Gizli hedefin (asla doğrudan söyleme, davranışınla göster): {c['hidden_goal']}\n"
         f"Bir müşterinin bilebileceği bilgiler:\n{known}\n\n"
         "Kurallar:\n"
         "- Yalnızca müşteri olarak konuş; asla çalışan, asistan veya yapay zekâ gibi konuşma.\n"
-        "- Kısa ve doğal Türkçe konuş, en fazla 2 cümle.\n"
-        "- Çalışan iyi bir çözüm sunarsa yumuşa; geçiştirirse ısrar et.\n"
-        f"- Sorunun çözüldüyse veya görüşmeyi bırakmak istiyorsan cevabının sonuna {END_MARKER} ekle."
+        + length_rule
+        + soften_rule
+        + "- İlk iki çalışan cevabından önce görüşmeyi bitirme.\n"
+        f"- Ancak somut bir çözüm duyduktan ve birkaç tur konuştuktan sonra, gerçekten vedalaşıyorsan cevabının sonuna {END_MARKER} ekle. Aksi halde ekleme."
     )
     msgs: list[dict[str, Any]] = [{"role": "system", "content": system}]
     for speaker, text in turns:

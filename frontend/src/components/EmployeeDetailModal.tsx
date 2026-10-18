@@ -193,7 +193,8 @@ export function EmployeeDetailModal({
                         <div>
                           <p className="font-medium text-ink">{s.training.title}</p>
                           <p className="text-xs text-muted">
-                            {channelLabel(s.channel)} · {new Date(s.started_at).toLocaleDateString("tr-TR")} · {s.employee_turn_count} tur
+                            {channelLabel(s.channel)}
+                            {s.customer_stance === "strict" ? " · Sert" : ""} · {new Date(s.started_at).toLocaleDateString("tr-TR")} · {s.employee_turn_count} tur
                           </p>
                         </div>
                         <div className="text-right">

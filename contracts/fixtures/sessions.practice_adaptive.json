@@ -52,5 +52,6 @@
       }
     ]
   },
-  "channel": "message"
+  "channel": "message",
+  "customer_stance": "normal"
 }

@@ -679,7 +679,14 @@ export interface components {
              *     `training_id` ile aynı eğitim olmalı (aksi 404/409/422).
              */
             practice?: components["schemas"]["PracticeRequest"] | null;
+            /** @description Verilmezse normal. Kanal ve zorluk etiketinden bağımsızdır. */
+            customer_stance?: components["schemas"]["CustomerStance"];
         };
+        /**
+         * @description `strict` kısa, kuralcı ve kolay yumuşamayan müşteri. `normal` senaryodaki ruh hâli.
+         * @enum {string}
+         */
+        CustomerStance: "normal" | "strict";
         /** @enum {string} */
         PracticeMode: "same" | "adaptive";
         PracticeRequest: {
@@ -730,6 +737,7 @@ export interface components {
             };
             /** @description Tekrar oturumuysa mod ve odak boyutlar; değilse null. */
             practice: components["schemas"]["PracticeInfo"] | null;
+            customer_stance: components["schemas"]["CustomerStance"];
             assignment_id: components["schemas"]["Id"] | null;
             status: components["schemas"]["SessionStatus"];
             /** @description Oturum bitmeden null. */
@@ -778,6 +786,7 @@ export interface components {
         };
         SessionSummary: {
             channel: components["schemas"]["PracticeChannel"];
+            customer_stance: components["schemas"]["CustomerStance"];
             /**
              * @description Raporu üreten çalışma zamanı. `stub` ise puan gerçektir sayılmaz. Rapor yoksa null.
              */

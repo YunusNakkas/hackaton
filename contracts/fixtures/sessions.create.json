@@ -43,7 +43,8 @@
     "started_at": "2026-10-17T10:00:00Z",
     "finished_at": null,
     "practice": null,
-    "channel": "message"
+    "channel": "message",
+    "customer_stance": "normal"
   },
   "opening_job_id": "01JA000000000000000000JB00"
 }

@@ -1117,6 +1117,9 @@ components:
         channel:
           $ref: "#/components/schemas/PracticeChannel"
           description: Atama varsa atamanın kanalı kullanılır.
+        customer_stance:
+          $ref: "#/components/schemas/CustomerStance"
+          description: Verilmezse normal. Kanal ve zorluk etiketinden bağımsızdır.
         client_request_id: { type: string, format: uuid }
         practice:
           description: |
@@ -1127,6 +1130,10 @@ components:
           oneOf:
             - { $ref: "#/components/schemas/PracticeRequest" }
             - { type: "null" }
+    CustomerStance:
+      type: string
+      description: "`strict` kısa, kuralcı ve kolay yumuşamayan müşteri. `normal` senaryodaki ruh hâli."
+      enum: [normal, strict]
     PracticeMode:
       type: string
       enum: [same, adaptive]
@@ -1201,6 +1208,7 @@ components:
         - employee
         - assignment_id
         - channel
+        - customer_stance
         - status
         - evaluation_status
         - review_status
@@ -1231,6 +1239,7 @@ components:
             - { $ref: "#/components/schemas/Id" }
             - { type: "null" }
         channel: { $ref: "#/components/schemas/PracticeChannel" }
+        customer_stance: { $ref: "#/components/schemas/CustomerStance" }
         status: { $ref: "#/components/schemas/SessionStatus" }
         evaluation_status:
           oneOf:
@@ -1308,11 +1317,13 @@ components:
         - employee_turn_count
         - practice_mode
         - channel
+        - customer_stance
         - model_runtime
         - started_at
         - finished_at
       properties:
         channel: { $ref: "#/components/schemas/PracticeChannel" }
+        customer_stance: { $ref: "#/components/schemas/CustomerStance" }
         model_runtime:
           description: Raporu üreten çalışma zamanı. `stub` ise puan gerçektir sayılmaz. Rapor yoksa null.
           oneOf:

@@ -21,6 +21,15 @@ def test_migrations_match_models(tmp_path):
 
 
 @pytest.mark.skipif(shutil.which("say") is None, reason="macOS `say` yok")
+def test_customer_voice_follows_the_name():
+    from app.core.config import Settings
+    from app.services.tts import voice_for_customer
+
+    settings = Settings(tts_voice="Yelda", tts_voice_male="Cem")
+    assert voice_for_customer(settings, "Murat Bey") == "Cem"
+    assert voice_for_customer(settings, "Ayşe Hanım") == "Yelda"
+
+
 def test_local_tts_produces_playable_audio(tmp_path):
     from app.core.config import Settings
     from app.services.tts import synthesize
@@ -56,4 +65,5 @@ def test_migrations_upgrade_populated_database(tmp_path):
     c = sqlite3.connect(db)
     assert c.execute("select count(*) from turns where session_id='S1'").fetchone()[0] == 1
     assert c.execute("select practice_mode from practice_sessions where id='S1'").fetchone() == (None,)
+    assert c.execute("select customer_stance from practice_sessions where id='S1'").fetchone() == ("normal",)
     assert not c.execute("select name from sqlite_master where name like '_alembic%'").fetchall()

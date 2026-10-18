@@ -28,6 +28,7 @@
       },
       "employee_turn_count": 2,
       "channel": "message",
+      "customer_stance": "normal",
       "model_runtime": null,
       "started_at": "2026-10-17T10:00:00Z",
       "finished_at": "2026-10-17T10:02:30Z",

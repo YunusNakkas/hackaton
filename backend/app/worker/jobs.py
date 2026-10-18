@@ -72,7 +72,7 @@ def clean_reply(text: str) -> tuple[str, bool]:
 # "Ayşe Hanım'ın bu yanıtı ile karşılaştığı durumu... Yeni bir diyalog başlatabilirsin.")
 _META = re.compile(r"diyalog|senaryo|\brol(ü|ün|de|den|e)?\b|yapay zek|asistan|müşteri olarak|çalışanın", re.I)
 MAX_REPLY_CHARS = 350
-MIN_TURNS_BEFORE_END = 2  # model ilk cevaptan sonra görüşmeyi bitirebiliyordu
+MIN_TURNS_BEFORE_END = 3  # Gemma ilk yumuşak cevapta [GÖRÜŞME_BİTTİ] basıyordu
 FALLBACK_REPLY = "Pardon, tam anlayamadım. Bu durumda ne yapabiliriz?"
 
 
@@ -89,9 +89,18 @@ def looks_out_of_role(text: str, customer_name: str) -> bool:
     return bool(_META.search(text) or third_person or "\n\n" in text.strip() or len(text) > MAX_REPLY_CHARS)
 
 
-def _synthesize_turn(settings: Settings, turn: Turn) -> None:
+def _customer_voice(db: Session, settings: Settings, turn: Turn) -> str | None:
+    if turn.speaker != "customer":
+        return None
+    session = db.get(PracticeSession, turn.session_id)
+    training = db.get(Training, session.training_id) if session else None
+    name = ((training.scenario or {}).get("customer") or {}).get("name", "") if training else ""
+    return tts.voice_for_customer(settings, name)
+
+
+def _synthesize_turn(db: Session, settings: Settings, turn: Turn) -> None:
     rel = Path("sessions") / turn.session_id / turn.id
-    res = tts.synthesize(settings, turn.text or "", _media(settings, rel))
+    res = tts.synthesize(settings, turn.text or "", _media(settings, rel), voice=_customer_voice(db, settings, turn))
     if res is not None:
         turn.audio_path = str(rel.with_suffix(res.path.suffix))
         turn.audio_mime, turn.duration_ms = res.mime, res.duration_ms
@@ -101,7 +110,7 @@ def _synthesize_turn(settings: Settings, turn: Turn) -> None:
 def process_opening(db: Session, job: Job, settings: Settings, model: ModelClient) -> dict:
     turn = db.get(Turn, job.turn_id)
     _stage(db, job, "synthesizing")
-    _synthesize_turn(settings, turn)
+    _synthesize_turn(db, settings, turn)
     return {"kind": "opening", "customer_turn": schemas.turn_json(turn)}
 
 
@@ -137,16 +146,21 @@ def process_turn(db: Session, job: Job, settings: Settings, model: ModelClient) 
         adaptive = ""
         if s.practice_mode == "adaptive":
             adaptive = prompts.adaptive_instructions(t.rubric, s.practice_focus or [])
-        messages = prompts.customer_messages(t.scenario, t.policies, [*history, ("employee", turn.text)], adaptive)
+        stance = s.customer_stance or "normal"
+        messages = prompts.customer_messages(
+            t.scenario, t.policies, [*history, ("employee", turn.text)], adaptive, stance)
+        # Sert müşteri tek cümlede kalsın; uzun üretim kısa-cevap kuralını deliyordu.
+        reply_tokens = 70 if stance == "strict" else 120
+        reminder = prompts.STRICT_ROLE_REMINDER if stance == "strict" else prompts.ROLE_REMINDER
         stub_ctx = {"scenario": t.scenario, "employee_text": turn.text or "", "history": history}
         reply, ended = clean_reply(model.chat(
-            messages, max_new_tokens=120, temperature=1.0, purpose="customer_reply", stub_context=stub_ctx))
+            messages, max_new_tokens=reply_tokens, temperature=1.0, purpose="customer_reply", stub_context=stub_ctx))
         if not reply or looks_out_of_role(reply, t.scenario["customer"]["name"]):
             log.warning("müşteri cevabı rol dışı, tekrar üretiliyor: %r", reply[:120])
             state["out_of_role"] = [reply]
-            retry = [{**messages[0], "content": messages[0]["content"] + "\n\n" + prompts.ROLE_REMINDER}, *messages[1:]]
+            retry = [{**messages[0], "content": messages[0]["content"] + "\n\n" + reminder}, *messages[1:]]
             reply, ended = clean_reply(model.chat(
-                retry, max_new_tokens=120, temperature=1.0, purpose="customer_reply", stub_context=stub_ctx))
+                retry, max_new_tokens=reply_tokens, temperature=1.0, purpose="customer_reply", stub_context=stub_ctx))
             if not reply or looks_out_of_role(reply, t.scenario["customer"]["name"]):
                 state["out_of_role"].append(reply)
                 reply, ended = FALLBACK_REPLY, False  # sabit, rolde kalan cümle; job.state'te iz bırakır
@@ -167,8 +181,8 @@ def process_turn(db: Session, job: Job, settings: Settings, model: ModelClient) 
     # Yazılı çalışan cevabı da yönetici tarafından tur bazında dinlenebilir.
     # Yüklenen özgün ses varsa onu koruruz.
     if turn.text and not turn.audio_path:
-        _synthesize_turn(settings, turn)
-    _synthesize_turn(settings, customer)
+        _synthesize_turn(db, settings, turn)
+    _synthesize_turn(db, settings, customer)
     turn.status = "ready"
     db.flush()
 

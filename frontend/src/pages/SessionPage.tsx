@@ -80,6 +80,16 @@ export function SessionPage() {
   const jobBusy = Boolean(liveJobId && (!job || ACTIVE.has(job.status)));
 
   useEffect(() => {
+    setShouldEnd(false);
+    setNotice(null);
+    setDraft("");
+    setSending(false);
+    setFreshAudioId(null);
+    seenAudio.current = null;
+    requestId.current = null;
+  }, [sessionId]);
+
+  useEffect(() => {
     if (job?.status !== "ready" && job?.status !== "error") return;
     void queryClient.invalidateQueries({ queryKey: ["session", sessionId] });
     if (job.result?.kind === "turn" && job.result.session_should_end) setShouldEnd(true);
@@ -193,6 +203,7 @@ export function SessionPage() {
         body: JSON.stringify({
           training_id: session.training.id,
           channel: session.channel,
+          customer_stance: session.customer_stance,
           client_request_id: crypto.randomUUID(),
           ...(focusIds.length
             ? { practice: { of_session_id: session.id, mode: "adaptive", focus_dimension_ids: focusIds } }
@@ -297,18 +308,23 @@ export function SessionPage() {
           ? "Süre doldu"
           : notice;
 
+  const phoneLive = phone && !finished;
+
   return (
     <div
-      className={`mx-auto max-w-3xl ${finished ? "" : "flex h-[calc(100dvh-7.75rem)] flex-col"}`}
+      className={`mx-auto max-w-3xl ${phoneLive ? "flex h-[calc(100dvh-6.25rem)] flex-col" : finished ? "" : "flex h-[calc(100dvh-7.75rem)] flex-col"}`}
     >
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
+      <div className={`flex flex-wrap items-end justify-between gap-3 ${phoneLive ? "shrink-0" : ""}`}>
+        <div className="min-w-0">
           <Link to="/" className="text-sm text-muted hover:text-ink">
             ← Eğitimler
           </Link>
-          <h1 className="mt-2 font-serif text-3xl tracking-tight">{session.training.title}</h1>
+          <h1 className={`mt-1 font-serif tracking-tight ${phoneLive ? "truncate text-xl" : "mt-2 text-3xl"}`}>
+            {session.training.title}
+          </h1>
           <p className="mt-1 text-sm text-muted">
             {session.employee_turn_count} / {session.max_turns} cevap
+            {session.customer_stance === "strict" ? " · Sert müşteri" : ""}
             {finished && evalStatus ? ` · ${session.review_status === "reviewed" ? "İncelendi" : evaluationLabel[evalStatus]}` : ""}
           </p>
         </div>
@@ -402,9 +418,12 @@ export function SessionPage() {
       )}
 
       {!finished && focus && (
-        <p className="mt-4 rounded-2xl bg-pine-soft px-4 py-3 text-sm text-pine">
-          Bu provanın odağı: {focus.names.filter(Boolean).join(", ") || focus.title}. {focus.instructions}
-        </p>
+        <details className={`rounded-2xl bg-pine-soft px-4 py-2 text-sm text-pine ${phoneLive ? "mt-2 shrink-0" : "mt-4"}`}>
+          <summary className="cursor-pointer font-medium">
+            Odak: {focus.names.filter(Boolean).join(", ") || focus.title}
+          </summary>
+          <p className="mt-2 leading-relaxed text-pine/90">{focus.instructions}</p>
+        </details>
       )}
 
       {finished && notice && <p role="alert" className="mt-4 text-accent">{notice}</p>}
@@ -417,6 +436,7 @@ export function SessionPage() {
           sessionId={session.id}
           waiting={jobBusy || sending}
           canTalk={canSend && job?.status !== "error" && !shouldEnd}
+          ended={shouldEnd || atLimit}
           notice={callNote}
           onUpload={sendAudio}
           onHangup={() => void (session.employee_turn_count === 0 ? abandon() : finish())}

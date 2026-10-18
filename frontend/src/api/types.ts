@@ -2,6 +2,7 @@ export type Role = "employee" | "manager";
 export type Difficulty = "easy" | "medium" | "hard";
 export type AssignmentStatus = "assigned" | "in_progress" | "completed";
 export type PracticeChannel = "message" | "phone";
+export type CustomerStance = "normal" | "strict";
 export type SessionStatus = "active" | "finished";
 export type Speaker = "employee" | "customer";
 export type TurnStatus = "processing" | "ready" | "error";
@@ -97,6 +98,7 @@ export interface Session {
   employee: { id: string; display_name: string };
   assignment_id: string | null;
   channel: PracticeChannel;
+  customer_stance: CustomerStance;
   status: SessionStatus;
   evaluation_status: EvaluationStatus | null;
   review_status: ReviewStatus;
@@ -238,6 +240,7 @@ export interface SessionSummary {
   evaluation_status: EvaluationStatus | null;
   review_status: ReviewStatus;
   channel: PracticeChannel;
+  customer_stance: CustomerStance;
   total: TotalScore | null;
   employee_turn_count: number;
   practice_mode: "same" | "adaptive" | null;

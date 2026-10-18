@@ -315,7 +315,8 @@ export function HomePage() {
               >
                 <Link to={`/sessions/${item.id}`} className="min-w-0 flex-1 hover:text-primary">
                   <p className="text-xs text-muted">
-                    {sectorLabel(item.training.sector)} · {channelLabel(item.channel)} · {new Date(item.started_at).toLocaleString("tr-TR")}
+                    {sectorLabel(item.training.sector)} · {channelLabel(item.channel)}
+                    {item.customer_stance === "strict" ? " · Sert" : ""} · {new Date(item.started_at).toLocaleString("tr-TR")}
                   </p>
                   <p className="mt-0.5 text-base font-medium">{item.training.title}</p>
                 </Link>
